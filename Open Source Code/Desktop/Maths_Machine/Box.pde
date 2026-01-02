@@ -178,6 +178,19 @@ public static class Box {
   } //if not in parent's hitbox, automatic false. Otherwise, check hitbox
   
   boolean hitbox(final Cursor curs) { return hitbox(curs.x,curs.y); }
+  
+  
+  boolean hitboxNoMove(final float x2, final float y2) {
+    return (parent==null || parent.hitboxNoMove(x2,y2) && !(mobile && parent.surfaceIsMoving()) ) && hitboxNoCheck(x2,y2);
+    //we return true if hitboxnocheck, and (if parent is not null) we're in the parent's non-moving hitbox and it's either not moving or the box doesn't care if it's moving
+  }
+  
+  boolean hitboxNoMove(final Cursor curs) { return hitboxNoMove(curs.x,curs.y); }
+  
+  
+  ////////////////////// UPDATE //////////////////////////////////
+  
+  boolean respondToChange(UICursor curs, final byte code, boolean selected) { return false; }
 }
 
 static class Text {

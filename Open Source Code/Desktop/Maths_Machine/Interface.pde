@@ -100,7 +100,7 @@ void interfaceInit(final Mmio io) {
     ctrlPanel.swapGraphMode(equatList.graphDim ? GraphMode.RECT3D : GraphMode.RECT2D); //set the graphmode to either 2D or 3D rectangular
     equatList.setActive(true);    //make the equation list visible
     graphMenu.setActive(false);   //make the graph menu invisible
-    io.setTyper(null); equatList.equatCache=null; equatList.updateColorSelector(); //we now type into nothing, there is no equation cache, and we have to update the color selector
+    io.setTyper(null); equatList.equatCache=null; equatList.updateEquationMenu(); //we now type into nothing, there is no equation cache, and we have to update the color selector
     grapher2D.setVisible(false);  //make the 2D graph invisible
     grapher3D.setVisible(false);  //make the 3D graph invisible
   } });
@@ -186,12 +186,12 @@ void initializeKeypad(final Button palette, float keyButtWid, float keyButtHig, 
   }
   
   final KeyPad secondary_orig = primary_orig.modClone(keyButtHBuff,keyButtVBuff,textBuffX,textBuffY, //here, we have the secondary key set. It's mostly the same, but with a few things different
-                                                      new String[] {"/",   "(",    ")",   "√",  "ln",  "π","e E","2nd"},
-                                                      new String[] {"%","Copy","Paste", "sin", "cos","Ans",  ",","1st"}, //Mostly, the buttons on the left get swapped out, as well as the divide button becoming modulo
-                                                      new int   [] {  4,     0,      0,     2,     2,    2,    1,    0},
-                                                      new Object[] {"%",  null,   null,"sin(","cos(","Ans",   ",",null});
+                                                      new String[] {"(",")",   "√",  "ln",    "π","e E",  "▼","2nd"},
+                                                      new String[] {"[","]", "sin", "cos",  "Ans",  ",",  "%","1st"}, //Mostly, the buttons on the left get swapped out, as well as the divide button becoming modulo
+                                                      new int   [] {  1,  1,     2,     2,      2,    1,    4,    0},
+                                                      new Object[] {"[","]","sin(","cos(",  "Ans",  ",",  "%", null});
   //make the copy and paste buttons do their jobs
-  secondary_orig.keys[1][0].setOnRelease(new Action() { public void act() { if(io.typer!=null) { //TODO remove this once you actually fully implement clipboard accessibility. This will take a lot of time, so no rush...
+  /*secondary_orig.keys[1][0].setOnRelease(new Action() { public void act() { if(io.typer!=null) { //TODO remove this once you actually fully implement clipboard accessibility. This will take a lot of time, so no rush...
     String text = io.typer.getText(); //grab the text from the input box
     copyToClipboard(text);            //copy it to the clipboard
   } } });
@@ -201,7 +201,7 @@ void initializeKeypad(final Button palette, float keyButtWid, float keyButtHig, 
       io.typer.eraseSelection(true); //erase highlighted selection (if there is one)
       io.typer.insert(text);         //insert it into the input box
     }
-  } } });
+  } } });*/
   
   final EnumMap<GraphMode, KeyPad> secondary = new EnumMap(GraphMode.class);
   
@@ -251,15 +251,17 @@ void initializeGraphMenu(Button palette, float buttHig) {
   int amt = 6; //number of buttons at the bottom
   float buttWid = width/float(amt); //width of each button
   
+  Button deadPalette = new Button(0,0,0,0).setFills(#181818,#303030,#606060).setStrokes(#808080); //a placeholder button we can steal the palette from
+  
   Button mode2D = (Button)new Button(0,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("2D",#00FFFF);
   Button mode3D = (Button)new Button(0,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("3D",#00FFFF).setActive(false);
-  Button trace = (Button)new Button(buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Trace",#00FFFF);
-  Button root = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Roots",#00FFFF);
-  Button inter = (Button)new Button(3*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Inters.",#00FFFF);
-  Button extreme = (Button)new Button(4*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Max/Min",#00FFFF);
+  Button trace = (Button)new Button(buttWid,0,buttWid,buttHig).setPalette(deadPalette).setParent(graphMenu).setText("Trace",#808080);
+  //Button labels2d = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Labels",#00FFFF);
+  Button roots = (Button)new Button(3*buttWid,0,buttWid,buttHig).setPalette(deadPalette).setParent(graphMenu).setText("Roots",#808080);
+  Button extreme = (Button)new Button(4*buttWid,0,buttWid,buttHig).setPalette(deadPalette).setParent(graphMenu).setText("Max/Min",#808080);
   Button reset = (Button)new Button(5*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Reset",#00FFFF);
   
-  final Button labels = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Labels",#00FFFF).setActive(false),
+  final Button labels = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText("Labels",#00FFFF).setActive(true),
                  axes = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText(  "Axes",#00FFFF).setActive(false),
               nothing = (Button)new Button(2*buttWid,0,buttWid,buttHig).setPalette(palette).setParent(graphMenu).setText(  "None",#00FFFF).setActive(false);
   
@@ -280,9 +282,9 @@ void initializeGraphMenu(Button palette, float buttHig) {
     }
   } });
   
-  labels .setOnRelease(new Action() { public void act() { equatList.axisMode = 1;  labels.setActive(false);    axes.setActive(true); } });
-  axes   .setOnRelease(new Action() { public void act() { equatList.axisMode = 0;    axes.setActive(false); nothing.setActive(true); } });
-  nothing.setOnRelease(new Action() { public void act() { equatList.axisMode = 2; nothing.setActive(false);  labels.setActive(true); } });
+  labels .setOnRelease(new Action() { public void act() { equatList.setAxisMode(1);  labels.setActive(false);    axes.setActive(true); } });
+  axes   .setOnRelease(new Action() { public void act() { equatList.setAxisMode(0);    axes.setActive(false); nothing.setActive(true); } });
+  nothing.setOnRelease(new Action() { public void act() { equatList.setAxisMode(2); nothing.setActive(false);  labels.setActive(true); } });
   
   point.setOnRelease(new Action() { public void act() { equatList.connect = ConnectMode.WIREFRAME; point.setActive(false);  wire.setActive(true); } });
   wire .setOnRelease(new Action() { public void act() { equatList.connect = ConnectMode.SURFACE;    wire.setActive(false);  surf.setActive(true); } });
@@ -295,8 +297,8 @@ void updateParCount() { //updates the on-screen counter for the number of parent
     int pars = 0;        //init to 0
     if(io.typer!=null) { //if typer isn't null:
       for(SimpleText t : io.typer.texts) { //loop through all chars in the typer
-        if     (t.text=='(' || t.text=='[') { ++pars; } //if ( or [, increment
-        else if(t.text==')' || t.text==']') { --pars; } //if ) or ], decrement
+        if     (t.text=='(' || t.text=='[' || t.text=='{') { ++pars; } //if ( or [, increment
+        else if(t.text==')' || t.text==']' || t.text=='}') { --pars; } //if ) or ], decrement
       }
     }
     
@@ -312,9 +314,11 @@ void updateParCount() { //updates the on-screen counter for the number of parent
 
 
 void findAnswer(CalcHistory history) {
-  if(io.typer.getText().length()==0) { return; } //empty text: do nothing. I'm serious, do nothing!
+  if(io.typer.texts.size()==0) { return; } //empty text: do nothing. I'm serious, do nothing!
   
-  ParseList parse = new ParseList(io.typer.getText()); //create parselist from calculator input
+  ArrayList<MathObj> answerStore = new ArrayList<MathObj>(); //this will store any answers that we link to in the equation
+  //ParseList parse = new ParseList(io.typer.getText()); //create parselist from calculator input
+  ParseList parse = new ParseList(io.typer, answerStore); //create parselist from calculator input
   parse.format(); //format the parselist
   
   Equation equat = new Equation(parse); //format to an equation
@@ -323,7 +327,7 @@ void findAnswer(CalcHistory history) {
   equat.setUnaryOperators();            //convert + and - to unary operators where appropriate
   
   String valid = equat.validStrings();
-  if(!valid.equals("valid"))                              { history.addEntry(io.typer.getText()+"", valid, new MathObj(false, valid), true); }
+  if     (!valid.equals("valid"))                         { history.addEntry(io.typer.getText()+"", valid, new MathObj(false, valid), true); }
   else if(!(valid=equat.    validPars()).equals("valid")) { history.addEntry(io.typer.getText()+"", valid, new MathObj(false, valid), true); }
   else if(!(valid=equat.leftMeHanging()).equals("valid")) { history.addEntry(io.typer.getText()+"", valid, new MathObj(false, valid), true); }
   else if(!(valid=equat.  countCommas()).equals("valid")) { history.addEntry(io.typer.getText()+"", valid, new MathObj(false, valid), true); }
@@ -337,10 +341,15 @@ void findAnswer(CalcHistory history) {
     HashMap<String, MathObj> mapper = history.varStore;
     
     int ind;
-    for(ind=0; ind<history.entries && !history.getAnswerExact(ind).isNormal(); ind++) { } //find the most recent answer that isn't a message or empty
+    for(ind=0; ind<history.entries && !history.getAnswerExact(ind)[0].isNormal(); ind++) { } //find the most recent answer that isn't a message or empty
     
-    if(ind==history.entries) { mapper.put("Ans",new MathObj(new Complex(Double.NaN))); } //if N/A, set it to NaN
-    else                     { mapper.put("Ans", history.getAnswerExact(ind).clone()); } //otherwise, set it to that answer
+    if(ind==history.entries) { mapper.put("Ans", new MathObj(Double.NaN)); } //if N/A, set it to NaN
+    else                     { mapper.put("Ans", history.getAnswerExact(ind)[0].clone()); } //otherwise, set it to that answer
+    
+    if(answerStore.size()!=0) { //if at least one answer was referenced and wrapped in parentheses:
+      MathObj[] ansList = answerStore.toArray(new MathObj[answerStore.size()]); //turn this into an array
+      mapper.put("__var__", new MathObj(ansList)); //link the hidden __var__ variable to this list of answers
+    }
     
     
     /*time2 = System.currentTimeMillis(); //DEBUG
@@ -356,11 +365,14 @@ void findAnswer(CalcHistory history) {
     try {
       answer = equat.solve(mapper);
     }
-    catch(CalculationException ex) {
+    /*catch(CalculationException ex) {
       answer = new MathObj(false, ex.getMessage());
     }
     catch(Exception ex) {
       answer = new MathObj(false, "INTERNAL EXCEPTION: "+ex.getClass().getSimpleName()+": "+ex.getMessage());
+    }*/
+    catch(Exception ex) {
+      answer = new MathObj(false, ex.getMessage());
     }
     
     saveVariablesToDisk(this, mapper);

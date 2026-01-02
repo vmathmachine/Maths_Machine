@@ -269,7 +269,6 @@ public static class Textbox extends Panel {
     float wids[] = mmio.getTextWidths(splitter, tSize); //calculate the width of each character
     
     for(int n=0;n<text.length();n++) { //loop through all characters to insert
-      //float w = mmio.getTextWidth(Character.toString(text.charAt(n)),tSize); //calculate width of each character
       newTexts.add(new SimpleText(text.charAt(n), xStart+wTotal, wids[n])); //insert each character
       wTotal+=wids[n];                                                      //increment total width appropriately
     }
@@ -310,6 +309,14 @@ public static class Textbox extends Panel {
     float wTotal = getX(size())-tx; //first, calculate the width
     texts.clear(); //next, clear the texts
     return -wTotal; //finally, return the change
+  }
+  
+  boolean assignCharObject(int pos, Object obj) { //assigns the misc object of a specific part of the text
+    if(pos>=0 && pos<size()) { //ensure index is in bounds
+      texts.get(pos).setMisc(obj);
+      return true;
+    }
+    return false;
   }
   
   //////////////////// TYPING (PUBLIC) ////////////////////////////////////
@@ -659,6 +666,7 @@ public static class Textbox extends Panel {
       anchorHandle = new TSHandle(buddy, buddy.anchorCaret, buddy.caret<buddy.anchorCaret ? RIGHT : LEFT, true);
     }
     
+    @Override
     boolean respondToChange(final UICursor curs, final byte code, boolean selected) { //responds to change in the cursor (0=release, 1=press, 2=move, 3=drag) (select iff cursor is already touching something)
       
       boolean hitbox = hitbox(curs); //first, find if the cursor is inside the hitbox
@@ -928,6 +936,7 @@ public static class Textbox extends Panel {
       }
     }
     
+    @Override
     boolean respondToChange(final UICursor curs, final byte code, boolean selected) { //TODO figure out if all of this is correct, and if so then clean it up
       boolean hitbox = hitbox(curs); //first, find if the cursor is inside the hitbox
       
@@ -1064,7 +1073,11 @@ static class SimpleText {
   SimpleText() { }
   SimpleText(char t, float x_, float w_) { text=t; x=x_; w=w_; }
   SimpleText(char t, float x_, float w_, byte p) { this(t,x_,w_); properties=p; }
+  SimpleText(char t, float x_, float w_, Object m_) { this(t,x_,w_); misc=m_; }
+  SimpleText(char t, float x_, float w_, byte p, Object m_) { this(t,x_,w_,p); misc=m_; }
   
   @Override
   String toString() { return Character.toString(text); }
+  
+  void setMisc(Object obj) { misc=obj; }
 }

@@ -1,6 +1,34 @@
 import java.math.BigInteger;
 
 public static class Cpx3 extends Cpx2 {
+  
+  public static double bernoulli(int ind) {
+    if(ind<21) { return Bernoulli[ind]; }
+    if((ind&1)==1) { return 0; }
+    
+    if(ind==22) { return 6192.12318840579710d; } //for some reason, the array cuts off at 20, despite the fact that, from 24 onward, the zeta function can be computed with just powers 1-4 (5 underflows)
+    
+    double pow2 = Math.scalb(1,-ind);
+    double zeta = Mafs.pow(0.33333333333333333d,ind) + pow2*(1+pow2) + 1;
+    return ((ind&3)==0?-2:2)*factorial(ind)*pow(2*Math.PI,-ind)*zeta;
+    
+    /*DoubleList bern = new DoubleList(ind);
+    for(int n=0;n<=ind;n++) {
+      if(n<21) { bern.append(Bernoulli[n]); }
+      if((n&1)==1) { bern.append(0); }
+      
+      double sum = 0;
+      double nCr = n+1;
+      for(int k=2;k<=n+1;k++) {
+        nCr *= (n+2d-k)/k; nCr = (long)nCr;
+        sum += nCr*bern.get(n+1-k);
+      }
+      bern.append(-sum/(n+1));
+    }
+    return bern.get(ind);*/
+  }
+  
+  
   public static Complex polygamma2(int m, Complex z) {
     if(m==-2) { return kFunction(z,false).addeq(mul(sub(Math.log(2*Math.PI)+1,z),z,0.5)); }
     return polygamma(m,z);
@@ -429,9 +457,10 @@ public static class Cpx3 extends Cpx2 {
   
   public static Complex bernPoly(int n, Complex z) { //computes the nth Bernoulli polynomial for Complex z
     if(n==0) { return one(); } //special case, n=0: return 1
+    if(n==1) { return z.sub(0.5); } //special case, n=1: return z-1/2
     Complex sum=zero(), expo=((n&1)==0)?one():z.mul(n), iter=sq(z);
     for(int k=n&1;k<n-1;k++) {
-      sum.addeq(expo.mul(Bernoulli[n-k]));
+      sum.addeq(expo.mul(bernoulli(n-k)));
       expo.muleq(z).muleq(((double)(n-k))/(k+1));
     }
     sum.addeq(expo.mul(z.div(n).sub(0.5D)));
@@ -1285,6 +1314,36 @@ static long carmichael(long inp) {
   return tot.longValue();
 }
 
+static long[] crt(long[] rems, long[] mods) {
+  if(mods.length!=rems.length) { throw new RuntimeException("Cannot evaluate Chinese Remainder Theorem unless number of modulos equals number of remainders"); }
+  
+  if(mods.length==0) { return new long[] {0,1}; } //if no equations are given, the answer is 0 mod 1
+  
+  long m1 = mods[0], r1 = Math.floorMod(rems[0],mods[0]); //store the current modular constraints
+  
+  for(int i=1;i<mods.length;i++) { //loop through all remaining modular constraints
+    long m2 = mods[i], r2 = Math.floorMod(rems[i],mods[i]);
+    
+    long g = gcf(m1,m2); // find the greatest common divisor between these two modulos
+    
+    if((r2-r1)%g != 0) { throw new RuntimeException("Solution to Chinese Remainder Theorem is unsolvable due to overconstraining from non-coprime modulos"); }
+    
+    
+    //Now we have the equations:
+    //((x-r1)/g)%(m1/g) = 0
+    //((x-r1)/g)%(m2/g) = (r2-r1)/g
+    //the solution to x%m1=r1, x%m2=r2 is x%(m1m2) = r1*m2*(m2^-1%m1) + r2*m1*(m1^-1%m2)
+    long r3 = (r2-r1)/g, q1 = m1/g, q2 = m2/g;
+    long rem = r3*q1*modInv(q1,q2);
+    
+    //now, we update our current strictest modular equation
+    m1 *= q2; //our modulo LCMs with m2
+    r1 = Math.floorMod(rem*g + r1, m1); //we take x = ((x-r1)/g)*g+r1, and modulo it with m1 to keep things from blowing up
+  }
+  
+  return new long[] {r1, m1}; //finally, return our result
+}
+
 static long[] toMixed(double inp, double err) { //this takes the input and converts it to a mixed number via continued fraction (with the error specified inside)
   int sgn=Mafs.sgn(inp);           //this will store the sign of our input
   double in=Math.abs(inp);         //copy the input (with a removed sign) over to in
@@ -1310,6 +1369,11 @@ static long[] toMixed(double inp, double err) { //this takes the input and conve
     f=1.0D/(f-s); //subtract f's integer part, take the reciprocal, that's the new value of f
   }
   return null; //if we've exhausted through the loop without getting close, return null to show it didn't work
+}
+
+static long[] toFrac(double inp, double err) {
+  long[] mixed = toMixed(inp,err);
+  return new long[] {mixed[1]+mixed[0]*mixed[2], mixed[2]};
 }
 
 static String mixedNumberString(long[] mixed) { //this converts a mixed number to a string

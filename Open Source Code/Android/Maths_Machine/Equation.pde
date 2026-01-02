@@ -96,7 +96,7 @@ public static class Equation implements Iterable<Entry> {
       
       if(!first.rightNum() && !second.leftNum()) { //an operator, left unary, left function, (, or comma is followed by an operator, right unary, ), or comma
         if(first.hasLeftPar() && second==EntryType.RPAR) { trail.inps=0; }    //special case: a ( or left function followed by a ): this isn't an error, but rather a function w/ 0 inputs
-        else { return "Error: "+trail.getId()+" followed by "+curr.getId(); } //otherwise, return an error message
+        else { return "Error: "+trail.showFormattedId()+" followed by "+curr.showFormattedId(); } //otherwise, return an error message
       }
     }
     return "valid"; //no error encountered: return valid
@@ -112,12 +112,12 @@ public static class Equation implements Iterable<Entry> {
       else if(curr.getType()==EntryType.COMMA) { //if it's a comma:
         Entry e = records.peek(); //record the current top of the stack
         e.inps++;                 //increment the number of inputs
-        if(e.inps > functionDictionary.minMax.get(e.id)[1]) { return "Error: too many inputs for function "+e.id; } //if too many inputs, return message saying so
+        if(e.inps > functionDictionary.minMax.get(e.id)[1]) { return "Error: too many inputs for function "+e.showFormattedId(); } //if too many inputs, return message saying so
       }
       else if(curr.getType()==EntryType.RPAR) { //if this has a right parenthesis,
         Entry e = records.peek(); //record the current top of the stack
-        if(e.inps < functionDictionary.minMax.get(e.id)[0]) { return "Error: too few inputs for function "+e.id; } //if too few inputs, return message saying so
-        if(!parenthesesMatch(e.id,curr.id)) { return "Error: cannot close \""+e.id+"\" with \""+curr.id+"\""; } //if the parentheses match incorrectly, return a message saying so
+        if(e.inps < functionDictionary.minMax.get(e.id)[0]) { return "Error: too few inputs for function "+e.showFormattedId(); } //if too few inputs, return message saying so
+        if(!parenthesesMatch(e.id,curr.id)) { return "Error: cannot close \""+e.showFormattedId()+"\" with \""+curr.showFormattedId()+"\""; } //if the parentheses match incorrectly, return a message saying so
         records.pop(); //pop this off the stack
       }
     }
@@ -274,19 +274,23 @@ public static class Equation implements Iterable<Entry> {
           MathObj addMe; //variable to add
           
           addMe = new MathObj(e); //try casting e to a math object
-          if(addMe.type==MathObj.VarType.NONE) {  //if that doesn't work,
+          
+          if(addMe.type==MathObj.VarType.NONE && !e.id.equals("NULL")) {  //if that doesn't work,
             addMe = new MathObj(true, e.getId()); //set it to represent the variable
           }
           
           //if(vari==null) { addMe = new MathObj(e); } //if there is none, try casting it to a math Object
           //else           { addMe = vari.clone();   } //otherwise, add the linked variable
-          if(addMe.type==MathObj.VarType.NONE) { throw new CalculationException("Cannot evaluate variable \""+e.getId()+"\""); } //if we get nothing, throw an error message
+          
+          if(addMe.type==MathObj.VarType.NONE && !e.id.equals("NULL")) {
+            throw new CalculationException("Cannot evaluate variable \""+e.getId()+"\""); //if we get nothing, throw an error message (TODO when is this even used?)
+          }
           out.add(addMe); //otherwise, add it to the list
         } break;
         case COMMA:
           println("HOW ARE THERE STILL COMMAS? I THOUGHT I KILLED YOU!!!"); //DEBUG
         break;
-        case LASSOP: case RASSOP: case LFUNC: case LUNOP: case RUNOP: { //functions / operators: idk yet
+        case LASSOP: case RASSOP: case LFUNC: case LUNOP: case RUNOP: { //functions / operators: execute their functionality
           int ind = 0; long time = 0, dTime = 0, timeInit = 0;
           if(showPerformance) { time = timeInit = System.nanoTime(); }
           
@@ -305,7 +309,8 @@ public static class Equation implements Iterable<Entry> {
           if(showPerformance) { dTime = System.nanoTime()-time; timeRec[ind] += dTime; timeRecSq[ind] += dTime*dTime; time += dTime; ++ind; }
           
           //MathFunc function = functionDictionary.find(e.id, inp); //load the function which has the same name as this entry AND has the correct input configuration
-          MathFunc[] options = functionDictionary.find(e.id);
+          //MathFunc[] options = functionDictionary.find(e.id);
+          MathFunc[] options = e.getFunctionList();
           
           if(showPerformance) { dTime = System.nanoTime()-time; timeRec[ind] += dTime; timeRecSq[ind] += dTime*dTime; time += dTime; ++ind; }
           
@@ -352,7 +357,7 @@ public static class Equation implements Iterable<Entry> {
     if(out.get(0).isVariable()) { //if it's a variable
       MathObj vari = mapper.get(out.get(0).variable); //dereference it
       if(vari==null) { } //I don't really know what to do here?
-      else { return vari; }
+      else { return vari.clone(); }
     }
     return out.get(0); //otherwise, return the math object itself
   }
@@ -394,7 +399,12 @@ public static class Equation implements Iterable<Entry> {
   //        "AND(","OR(",
   //        "week(","New_Years(","Valentines(","St_Patricks(","Mothers_Day(","Fathers_Day(","Halloween(","Thanksgiving(","Christmas("});
 
-  public static String[] varList = largestToSmallest(new String[] {"Ans","true","false","today","yesterday","tomorrow","Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Catalan","π","pi","e","γ","gamma","i"});
+  //public static String[] varList = largestToSmallest(new String[] {"Ans","true","false","today","yesterday","tomorrow","Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Catalan","NULL","π","pi","e","γ","gamma","i"});
+  
+  public static String[] varList = largestToSmallest(new String[] {"i","π","pi","e","γ","gamma","Catalan", //mathematical constants
+                                                                   "Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","today","yesterday","tomorrow", //dates
+                                                                   "NULL","true","false", //booleans / objects
+                                                                   "Ans","__var__"}); //references to answers in the history display
   
   /*public static int minInps(String func) { //minimum number of inputs a function can have
     switch(func) {
@@ -443,6 +453,9 @@ public static class Equation implements Iterable<Entry> {
       case "Σ(": case "Sigma(": case "Π(": case "Pi(": case "AND(": case "OR(":    return new int[] {3}; //sum and product: link 0 is input 3 (variable, start, end, equation)
       case "plug(": case "d/dx(": case "d²/dx²(": case "d^2/dx^2(": case "limit(": return new int[] {2}; //plug, derivatives, limit: link 0 is input 2 (variable, value, equation [epsilon] [method])
       case "BuildVec(": case "BuildArray(":                                        return new int[] {2}; //build vector/array: link 0 is input 2 (size, variable, equation for each element)
+      case "elw(":                                                                 return new int[] {1};
+      case "elw2(":                                                                return new int[] {2};
+      case "elw3(":                                                                return new int[] {3};
       case "dⁿ/dxⁿ(": case "d^n/dx^n(":                                            return new int[] {3}; //n-th derivative: link 0 is input 3 (n, variable, value, equation [epsilon] [method])
       case "∫(": case "Integral(":                                                 return new int[] {3}; //integral: link 0 is input 3 (variable, start, end, equation [samples] [method])
       case "Secant(":                                                              return new int[] {3}; //Secant method: link 0 is input 3 (variable, x0, x1, equation)
@@ -475,7 +488,12 @@ public static class Equation implements Iterable<Entry> {
 }
 
 static class CalculationException extends Exception {
-  CalculationException(String s) {
-    super(s);
+  private static final boolean DEBUG = false; //toggle stack traces
+  
+  CalculationException(String s) { super(s); }
+  
+  @Override
+  public synchronized Throwable fillInStackTrace() { //overthrow the stack tracer so as to make error messages less expensive (speedup about twofold)
+    return DEBUG ? super.fillInStackTrace() : this;
   }
 }

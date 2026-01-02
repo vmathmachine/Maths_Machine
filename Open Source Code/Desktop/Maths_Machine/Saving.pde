@@ -129,7 +129,7 @@ void loadEquations(boolean dim) {
           text = builder.toString();                      //cast to a string
         }
         
-        equatList.addEquation(dim,n, stroke,vis,mode,text);
+        equatList.addEquation(dim,n, stroke,vis,mode,text, false); //add this equation to the list (don't save to disk)
       }
     }
   }

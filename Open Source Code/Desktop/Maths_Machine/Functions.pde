@@ -13,8 +13,8 @@ public static class MathFunc { //a class for storing math functions
     name = n; regex = i; lambda = f;
   }
   
-  boolean matches(MathObj[] v, HashMap<String, MathObj> mapper) {
-    return regex.matches(v, mapper);
+  boolean matches(MathObj[] v, HashMap<String, MathObj> mapper, boolean modify) {
+    return regex.matches(v, mapper, modify);
   }
   
   boolean matches(byte[] seq) { //does the same thing, but for a preprocessed sequence of bytes
@@ -123,8 +123,10 @@ public static class FuncList { //a class for storing lists of acceptable math fu
       //if(func.matches(inps, mapper)) { return func; } //return the first function whose regex matches the input sequence
       
       System.arraycopy(inps,0, inpCopy,0,inps.length); //copy over the input list
-      if(func.matches(inpCopy, mapper)) { //find the first function whose regex matches the input sequence
+      if(func.matches(inpCopy, mapper, true)) { //find the first function whose regex matches the input sequence
+      //if(func.matches(inps, mapper, false)) {
         System.arraycopy(inpCopy,0, inps,0,inps.length); //since this is a match, copy back the (potentially) altered inputs
+        //func.matches(inps, mapper, true);
         return func; //return the function
       }
     }
@@ -188,23 +190,33 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("<=","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.re<inp[1].number.re || inp[0].number.re==inp[1].number.re && inp[0].number.im<=inp[1].number.im); } }),
   new MathFunc(">=","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.re>inp[1].number.re || inp[0].number.re==inp[1].number.re && inp[0].number.im>=inp[1].number.im); } }),
   
-  new MathFunc(":=","V.",(map,inp) -> {
+  new MathFunc(":=","V.",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     MathObj value = inp[1].passByValue(map);
     map.put(inp[0].variable, value);
     return value;
-  }),
-  new MathFunc("unset(","V",(map,inp) -> {
+  } }),
+  new MathFunc("unset(","V",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     map.remove(inp[0].variable);
     return new MathObj();
-  }),
-  new MathFunc("showAllVars(","",(map,inp) -> {
+  } }),
+  new MathFunc("showAllVars(","",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     MathObj[] vars = new MathObj[map.size()];
     int ind = 0;
-    for(var iter : map.entrySet()) {
+    for(Map.Entry<String, MathObj> iter : map.entrySet()) {
       vars[ind++] = new MathObj(false, iter.getKey());
     }
     return new MathObj(vars);
-  }),
+  } }),
+  new MathFunc("clearAllVars(","",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    String[] keys = new String[map.size()]; int ind = 0;
+    for(Map.Entry<String,MathObj> iter : map.entrySet()) {
+      keys[ind++] = iter.getKey();
+    }
+    for(String key : keys) {
+      map.remove(key);
+    }
+    return new MathObj();
+  } }),
   
   new MathFunc("__-__","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.neg()); } }), //then, some important elementary functions
   new MathFunc("√(" ,"c",tempFunc = new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.sqrt()); } }),
@@ -216,7 +228,7 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc(   "²","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.sq()); } }),
   new MathFunc(   "³","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.cub()); } }),
   
-  new MathFunc("fp(",".",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { inp[0].fp=true; return inp[0]; } }), //the full precision function
+  new MathFunc("fp(",".",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { MathObj value = inp[0].passByValue(map); value.fp=true; return value; } }), //the full precision function
   
   new MathFunc("ulp(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.ulpMax()); } }), //ulp (unit in last place)
   new MathFunc("ulp(","v",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].vector.ulpMax()); } }),
@@ -272,14 +284,12 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("&&","be",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
     if(!inp[0].bool) { return new MathObj(false); }
     MathObj right = inp[1].equation.solve(map);
-    //return right.isBool() ? right : new MathObj("Cannot evaluate boolean && "+right.type);
     if(right.isBool()) { return right; }
     else { throw new CalculationException("Cannot evaluate boolean && "+right.type); }
   } }),
   new MathFunc("||","be",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
     if(inp[0].bool) { return new MathObj(true); }
     MathObj right = inp[1].equation.solve(map);
-    //return right.isBool() ? right : new MathObj("Cannot evaluate boolean || "+right.type);
     if(right.isBool()) { return right; }
     else { throw new CalculationException("Cannot evaluate boolean || "+right.type); }
   } }),
@@ -314,8 +324,8 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("unit(","v",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].vector.unit()); } }),
   new MathFunc("size(","v",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].vector.size()); } }),
   new MathFunc("zero(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isWhole()) { return new MathObj(CVector.zero((int)inp[0].number.re)); }
-    throw new CalculationException("Cannot create zero vector of size "+inp[0].number);
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"size"}, "create zero vector");
+    return new MathObj(CVector.zero((int)inp[0].number.re));
   } }),
   
   
@@ -353,17 +363,25 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("width(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.w); } }),
   new MathFunc("height(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.h); } }),
   new MathFunc("__-__","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.neg()); } }),
+  new MathFunc("²","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.sq()); } }),
+  new MathFunc("³","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.cub()); } }),
   new MathFunc("Identity(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isWhole()) { return new MathObj(CMatrix.identity((int)inp[0].number.re)); }
-    throw new CalculationException("Cannot create "+inp[0].number+"x"+inp[0].number+" identity matrix");
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"size"}, "create identity matrix");
+    return new MathObj(CMatrix.identity((int)inp[0].number.re));
   } }),
   new MathFunc("zero(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isWhole() && inp[1].number.isWhole()) { return new MathObj(new CMatrix((int)inp[0].number.re, (int)inp[1].number.re)); }
-    throw new CalculationException("Cannot create "+inp[0].number+"x"+inp[1].number+" zero matrix");
+    enforceParamTypes(inp, new String[] {"W","W"}, new String[] {"height","width"}, "create zero matrix");
+    return new MathObj(new CMatrix((int)inp[0].number.re, (int)inp[1].number.re));
   } }),
   new MathFunc("T(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.transpose()); } }),
   new MathFunc("tr(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.trace()); } }),
   new MathFunc("det(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.determinant()); } }),
+  new MathFunc("frob(","mm",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.frobenius(inp[1].matrix)); } }),
+  new MathFunc("inner(","mm",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.innerProduct(inp[1].matrix)); } }),
+  new MathFunc("frobSq(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.frobeniusSq()); } }),
+  new MathFunc("innerSq(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.innerSq()); } }),
+  new MathFunc("frob(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.frobenius()); } }),
+  new MathFunc("innerNorm(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.innerNorm()); } }),
   new MathFunc("eigenvalues(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     Complex[] eigenvalues = inp[0].matrix.eigenvalues(); //get the eigenvalues
     MathObj[] arr = new MathObj[eigenvalues.length];
@@ -427,6 +445,23 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
       matrix.set(n+1,n+1,inp[0].vector.get(n+1).copy());
     }
     return new MathObj(matrix);
+  } }),
+  
+  new MathFunc("ker(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    CVector[] kernel = inp[0].matrix.nullSpace(false);
+    
+    MathObj[] arr = new MathObj[kernel.length];
+    for(int n=0;n<arr.length;n++) { arr[n] = new MathObj(kernel[n].neg()); }
+    
+    return new MathObj(arr);
+  } }),
+  
+  new MathFunc("jordan(","m",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    CMatrix[] jordan = inp[0].matrix.jordanDecomposition();
+    
+    MathObj[] arr = new MathObj[] {new MathObj(jordan[0]), new MathObj(jordan[1]), new MathObj(jordan[2])};
+    
+    return new MathObj(arr);
   } }),
   
   new MathFunc("√(","m",tempFunc = new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].matrix.sqrt()); } }),
@@ -613,19 +648,65 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     return new MathObj(array);
   } }),
   
+  new MathFunc("elw(","Vea",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //elementwise operation
+    MathObj[] out = new MathObj[inp[2].array.length];
+    
+    HashMap<String,MathObj> map2 = (HashMap<String,MathObj>)map.clone();
+    
+    for(int i=0;i<out.length;i++) {
+      map2.put(inp[0].variable, inp[2].array[i]);
+      out[i] = inp[1].equation.solve(map2);
+    }
+    
+    return new MathObj(out);
+  } }),
+  
+  new MathFunc("elw2(","VVeaa",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] arr1 = inp[3].array, arr2 = inp[4].array;
+    if(arr1.length!=arr2.length) { throw new CalculationException("Cannot evaluate elementwise operation on two arrays of unequal length"); }
+    MathObj[] out = new MathObj[arr1.length];
+    
+    HashMap<String,MathObj> map2 = (HashMap<String,MathObj>)map.clone();
+    
+    for(int i=0;i<out.length;i++) {
+      map2.put(inp[0].variable, arr1[i]);
+      map2.put(inp[1].variable, arr2[i]);
+      out[i] = inp[2].equation.solve(map2);
+    }
+    
+    return new MathObj(out);
+  } }),
+  
+  new MathFunc("elw3(","VVVeaaa",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] arr1 = inp[4].array, arr2 = inp[5].array, arr3 = inp[6].array;
+    if(arr1.length!=arr2.length || arr1.length!=arr3.length) { throw new CalculationException("Cannot evaluate elementwise operation on three arrays of unequal length"); }
+    MathObj[] out = new MathObj[arr1.length];
+    
+    HashMap<String,MathObj> map2 = (HashMap<String,MathObj>)map.clone();
+    
+    for(int i=0;i<out.length;i++) {
+      map2.put(inp[0].variable, arr1[i]);
+      map2.put(inp[1].variable, arr2[i]);
+      map2.put(inp[2].variable, arr3[i]);
+      out[i] = inp[3].equation.solve(map2);
+    }
+    
+    return new MathObj(out);
+  } }),
+  
   
   
   new MathFunc("+","dc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //date functions
-    if(inp[1].number.isInt()) { return new MathObj(inp[0].date.add((long)inp[1].number.re)); }
-    throw new CalculationException("Cannot add non-integer number of days");
+    enforceParamTypes(inp, new String[] {"","Z"}, new String[] {"","number of days"}, "add date");
+    return new MathObj(inp[0].date.add((long)inp[1].number.re));
   } }),
   new MathFunc("+","cd",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(inp[1].date.add((long)inp[0].number.re)); }
-    throw new CalculationException("Cannot add non-integer number of days");
+    enforceParamTypes(inp, new String[] {"Z",""}, new String[] {"number of days",""}, "add date");
+    return new MathObj(inp[1].date.add((long)inp[0].number.re));
   } }),
   new MathFunc("-","dc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[1].number.isInt()) { return new MathObj(inp[0].date.sub((long)inp[1].number.re)); }
-    throw new CalculationException("Cannot subtract non-integer number of days");
+    enforceParamTypes(inp, new String[] {"","Z"}, new String[] {"","number of days"}, "subtract from date");
+    return new MathObj(inp[0].date.sub((long)inp[1].number.re));
   } }),
   new MathFunc("-","dd",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].date.sub(inp[1].date)); } }),
   new MathFunc("<","dd",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].date.less(inp[1].date)); } }),
@@ -635,36 +716,36 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("week(","d",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(false, inp[0].date.dayOfWeek()+""); } }),
   
   new MathFunc("New_Years(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.newYears((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find New Years");
+    return new MathObj(Date.newYears((long)inp[0].number.re));
   } }),
   new MathFunc("Valentines(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.valentines((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Valentines day");
+    return new MathObj(Date.valentines((long)inp[0].number.re));
   } }),
   new MathFunc("St_Patricks(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.stPatricks((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find St Patrick's day");
+    return new MathObj(Date.stPatricks((long)inp[0].number.re));
   } }),
   new MathFunc("Mothers_Day(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.mothersDay((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Mother's day");
+    return new MathObj(Date.mothersDay((long)inp[0].number.re));
   } }),
   new MathFunc("Fathers_Day(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.fathersDay((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Father's day");
+    return new MathObj(Date.fathersDay((long)inp[0].number.re));
   } }),
   new MathFunc("Halloween(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.halloween((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Halloween");
+    return new MathObj(Date.halloween((long)inp[0].number.re));
   } }),
   new MathFunc("Thanksgiving(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.thanksgiving((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Thanksgiving");
+    return new MathObj(Date.thanksgiving((long)inp[0].number.re));
   } }),
   new MathFunc("Christmas(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(inp[0].number.isInt()) { return new MathObj(Date.christmas((long)inp[0].number.re)); }
-    throw new CalculationException("Year must be an integer");
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"year"}, "find Christmas");
+    return new MathObj(Date.christmas((long)inp[0].number.re));
   } }),
   
   new MathFunc("Re(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(inp[0].number.re); } }), //complex number evaluation
@@ -699,30 +780,22 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("nPr(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(Cpx2.factorial(inp[0].number).div(Cpx2.factorial(inp[0].number.sub(inp[1].number)))); } }),
   new MathFunc("nCr(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     if(inp[0].number.isWhole() && inp[1].number.isInt()) {
-      int n = (int)inp[0].number.re, r = (int)inp[1].number.re;
-      if(r<0 || r>n) { return new MathObj(new Complex()); }
-      double ncr = 1d;
-      for(int k=1;k<=r && k<=n-r;k++) {
-        ncr*=(n-k+1d)/k;
-      }
-      return new MathObj(new Complex(ncr));
+      return new MathObj(nCrInt((int)inp[0].number.re,(int)inp[1].number.re));
     }
     return new MathObj(Cpx2.factorial(inp[0].number).div(Cpx2.factorial(inp[1].number).mul(Cpx2.factorial(inp[0].number.sub(inp[1].number)))));
   } }),
-  new MathFunc("rand(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
-    double rand = Math.random(); return new MathObj(inp[0].number.add(inp[1].number.sub(inp[0].number).mul(rand)));
-  } }),
-  new MathFunc("randInt(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isReal() || !inp[1].number.isReal()) { throw new CalculationException("Cannot take random integer over non-real interval"); }
-    double range = inp[1].number.re-inp[0].number.re+1;
-    return new MathObj(Math.floor(Math.random()*range+inp[0].number.re));
-  } }),
-  new MathFunc("randNorm(","",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
-    return new MathObj(new Complex(random.nextGaussian()));
-  } }),
-  new MathFunc("randNorm(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
-    return new MathObj(inp[1].number.mul(random.nextGaussian()).addeq(inp[0].number));
-  } }),
+  new MathFunc("rand(","c?c?",tempFunc = new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    Complex left = inp.length==2 ? inp[0].number : Cpx.zero();
+    Complex right = inp.length==0 ? Cpx.one() : inp.length==1 ? inp[0].number : inp[1].number;
+    double rand = Math.random(); return new MathObj(left.add(right.sub(left).muleq(rand)));
+  } }), new MathFunc("randUnif(","c?c?",tempFunc),
+  new MathFunc("randInt(","cc?",tempFunc = new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex left = inp.length==2 ? inp[0].number : Cpx.zero();
+    Complex right = inp.length==2 ? inp[1].number : inp[0].number;
+    if(!left.isInt() || !right.isInt()) { throw new CalculationException("Cannot take random integer over non-real interval"); }
+    double range = right.re-left.re+1;
+    return new MathObj(Math.floor(Math.random()*range+left.re));
+  } }), new MathFunc("discRandUnif(","cc?",tempFunc),
   new MathFunc("max(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
     Complex max = new Complex(Double.NEGATIVE_INFINITY);
     for(MathObj m : inp) {
@@ -739,17 +812,27 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("stir1(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //Stirling numbers of the first kind
-    if(!inp[0].number.isInt() || !inp[1].number.isInt()) { throw new CalculationException("Stirling numbers only work for integer inputs"); }
+    enforceParamTypes(inp, new String[] {"Z","Z"}, new String[] {"1st input","2nd input"}, "find Stirling numbers of the first kind");
     return new MathObj(stirling1((int)(inp[0].number.re), (int)(inp[1].number.re)));
   } }),
   
   new MathFunc("stir2(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //Stirling numbers of the second kind
-    if(!inp[0].number.isInt() || !inp[1].number.isInt()) { throw new CalculationException("Stirling numbers only work for integer inputs"); }
+    enforceParamTypes(inp, new String[] {"Z","Z"}, new String[] {"1st input","2nd input"}, "find Stirling numbers of the second kind");
     return new MathObj(stirling2((int)(inp[0].number.re), (int)(inp[1].number.re)));
   } }),
   
+  new MathFunc("Bern(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //Bernoulli numbers
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"modulus"}, "Bernoulli numbers");
+    return new MathObj(Cpx3.bernoulli((int)inp[0].number.re));
+  } }),
+  
+  new MathFunc("BernPoly(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //Bernoulli polynomial
+    enforceParamTypes(inp, new String[] {"W",""}, new String[] {"modulus", "input"}, "find Bernoulli polynomials");
+    return new MathObj(Cpx3.bernPoly((int)(inp[0].number.re), inp[1].number));
+  } }),
+  
   new MathFunc("PolyEval(","c+",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { //evalutates polynomial using Horner's method (input, coefficients...)
-    if(inp.length==1) { return new MathObj(new Complex()); } //special case: the zero polynomial
+    if(inp.length==1) { return new MathObj(0); } //special case: the zero polynomial
     
     Complex result = inp[1].number; //init result to leading coefficient
     for(int n=2;n<inp.length;n++) { //loop through all coefficients (except the leading)
@@ -808,11 +891,11 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("Li₂(","c",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(Cpx3.Li2(inp[0].number)); } }), new MathFunc("Li2(","c",tempFunc), //polygamma functions
   new MathFunc("Cl₂(","c",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(Cpx3.Cl2(inp[0].number)); } }), new MathFunc("Cl2(","c",tempFunc),
   new MathFunc("Li(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt()) { throw new CalculationException("Cannot take polylogarithm with non-integer modulus :("); }
+    enforceParamTypes(inp, new String[] {"Z",""}, new String[] {"modulus"}, "perform polylogarithm function");
     return new MathObj(Cpx3.polylog((int)inp[0].number.re,inp[1].number));
   } }),
   new MathFunc("Cl(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt()) { throw new CalculationException("Cannot take Clausen function with non-integer modulus :("); }
+    enforceParamTypes(inp, new String[] {"Z",""}, new String[] {"modulus"}, "perform Clausen function");
     return new MathObj(Cpx3.Cl((int)inp[0].number.re,inp[1].number));
   } }),
   
@@ -840,9 +923,454 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   new MathFunc("BesselH1(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(Cpx3.besselH1(inp[0].number, inp[1].number)); } }),
   new MathFunc("BesselH2(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) { return new MathObj(Cpx3.besselH2(inp[0].number, inp[1].number)); } }),
   
+  //here we have to now add statistical functions:
+  new MathFunc("normPDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(normPDF(params[0].number,params[1].number,params[2].number));
+  } }),
+  
+  new MathFunc("normCDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(normCDF(params[0].number,params[1].number,params[2].number));
+  } }),
+  new MathFunc("qNorm(","cc?c?",new Functional() { public MathObj func(HashMap<String,MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(qNorm(params[0].number,params[1].number,params[2].number));
+  } }),
+  new MathFunc("randNorm(","",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(random.nextGaussian());
+  } }),
+  new MathFunc("randNorm(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[1].number.mul(random.nextGaussian()).addeq(inp[0].number));
+  } }),
+  
+  new MathFunc("unifPDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(1),new MathObj(0)});
+    if(inp.length!=3) { MathObj temp=params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","R","R"}, new String[] {"input","left","right"}, "evaluate uniform PDF");
+    
+    return new MathObj(unifPDF(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("unifCDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(1),new MathObj(0)});
+    if(inp.length!=3) { MathObj temp=params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","R","R"}, new String[] {"input","left","right"}, "evaluate uniform CDF");
+    
+    return new MathObj(unifCDF(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("qUnif(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(1),new MathObj(0)});
+    if(inp.length!=3) { MathObj temp=params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","R","R"}, new String[] {"area","left","right"}, "evaluate uniform quantile");
+    
+    return new MathObj(qUnif(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }), //and continuous uniform randomizer was already defined with rand
+  
+  new MathFunc("discUnifPMF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0)});
+    if(inp.length!=3) { MathObj temp = params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","Z","Z"}, new String[] {"input","left","right"}, "evaluate discrete uniform PMF");
+    if(params[1].number.re > params[2].number.re) { throw new CalculationException("Invalid bounds for discrete uniform"); }
+    
+    return new MathObj(discUnifPMF(params[0].number.re, (long)params[1].number.re, (long)params[2].number.re));
+  } }),
+  new MathFunc("discUnifCDF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0)});
+    if(inp.length!=3) { MathObj temp = params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","Z","Z"}, new String[] {"input","left","right"}, "evaluate discrete uniform CDF");
+    if(params[1].number.re > params[2].number.re) { throw new CalculationException("Invalid bounds for discrete uniform"); }
+    
+    return new MathObj(discUnifCDF(params[0].number.re, (long)params[1].number.re, (long)params[2].number.re));
+  } }),
+  new MathFunc("qDiscUnif(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0)});
+    if(inp.length!=3) { MathObj temp = params[1]; params[1]=params[2]; params[2]=temp; } //this is how we get around the right parameter being set w/ higher precedence than the left
+    enforceParamTypes(params, new String[] {"R","Z","Z"}, new String[] {"area","left","right"}, "evaluate discrete uniform quantile");
+    if(params[1].number.re > params[2].number.re) { throw new CalculationException("Invalid bounds for discrete uniform"); }
+    
+    return new MathObj(qDiscUnif(params[0].number.re, (long)params[1].number.re, (long)params[2].number.re));
+  } }),
+  
+  new MathFunc("binomPMF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"input","n","p"}, "evalute binomial PMF");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute binomial PMF with p outside [0,1]"); }
+    
+    return new MathObj(params[0].number.isInt() ? binomPMF((int)params[0].number.re, (int)params[1].number.re, params[2].number.re) : 0);
+  } }),
+  new MathFunc("binomCDF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"input","n","p"}, "evalute binomial CDF");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute binomial CDF with p outside [0,1]"); }
+    
+    return new MathObj(binomCDF((int)Math.floor(params[0].number.re), (int)params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("qBinom(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"area","n","p"}, "evalute binomial quantile");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute binomial quantile with p outside [0,1]"); }
+    
+    return new MathObj(qBinom(params[0].number.re, (int)params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("randBinom(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"W","R"}, new String[] {"n","p"}, "randomize binomial distribution");
+    if(params[1].number.re<0 || params[1].number.re>1) { throw new CalculationException("Cannot randomize binomial with p outside [0,1]"); }
+    
+    return new MathObj(randBinom((int)params[0].number.re, params[1].number.re));
+  } }),
+  
+  new MathFunc("poisPMF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"input","λ"}, "evalute Poisson PMF");
+    
+    return new MathObj(inp[0].number.isInt() ? poisPMF((int)inp[0].number.re, inp[1].number.re) : 0);
+  } }),
+  new MathFunc("poisCDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"input","λ"}, "evalute Poisson CDF");
+    
+    return new MathObj(poisCDF((int)Math.floor(inp[0].number.re), inp[1].number.re));
+  } }),
+  new MathFunc("qPois(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"area","λ"}, "evalute Poisson quantile");
+    
+    return new MathObj(qPois(inp[0].number.re, inp[1].number.re));
+  } }),
+  new MathFunc("randPois(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R0+"}, new String[] {"λ"}, "evalute Poisson randomizer");
+    
+    return new MathObj(randPois(inp[0].number.re));
+  } }),
+  
+  new MathFunc("expPDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"input","λ"}, "evaluate exponential PDF");
+    
+    return new MathObj(expPDF(inp[0].number.re, inp[1].number.re));
+  } }),
+  new MathFunc("expCDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"input","λ"}, "evaluate exponential CDF");
+    
+    return new MathObj(expCDF(inp[0].number.re, inp[1].number.re));
+  } }),
+  new MathFunc("qExp(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"area","λ"}, "evaluate exponential quantile");
+    
+    return new MathObj(qExp(inp[0].number.re, inp[1].number.re));
+  } }),
+  new MathFunc("randExp(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R0+"}, new String[] {"λ"}, "evaluate exponential randomizer");
+    
+    return new MathObj(randExp(inp[0].number.re));
+  } }),
+  
+  new MathFunc("chi2PDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"input","degrees of freedom"}, "evaluate χ² PDF");
+    
+    return new MathObj(chi2PDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("chi2CDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"input","degrees of freedom"}, "evaluate χ² CDF");
+    
+    return new MathObj(chi2CDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("qChi2(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"area","degrees of freedom"}, "evaluate χ² quantile");
+    
+    return new MathObj(qChi2(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("randChi2(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"degrees of freedom"}, "randomize χ²");
+    
+    return new MathObj(randChi2((int)inp[0].number.re));
+  } }),
+  
+  new MathFunc("chiPDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"input","degrees of freedom"}, "evaluate χ PDF");
+    
+    return new MathObj(chiPDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("chiCDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"input","degrees of freedom"}, "evaluate χ CDF");
+    
+    return new MathObj(chiCDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("qChi(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"area","degrees of freedom"}, "evaluate χ quantile");
+    
+    return new MathObj(qChi(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("randChi(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"degrees of freedom"}, "randomize χ");
+    
+    return new MathObj(randChi((int)inp[0].number.re));
+  } }),
+  
+  new MathFunc("erlangPDF(","ccc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W","R0+"}, new String[] {"input","shape","λ"}, "evaluate Erlang PDF");
+    
+    return new MathObj(erlangPDF(inp[0].number.re, (int)inp[1].number.re, inp[2].number.re));
+  } }),
+  new MathFunc("erlangCDF(","ccc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W","R0+"}, new String[] {"input","shape","λ"}, "evaluate Erlang CDF");
+    
+    return new MathObj(erlangCDF(inp[0].number.re, (int)inp[1].number.re, inp[2].number.re));
+  } }),
+  new MathFunc("qErlang(","ccc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W","R0+"}, new String[] {"area","shape","λ"}, "evaluate Erlang quantile");
+    
+    return new MathObj(qErlang(inp[0].number.re, (int)inp[1].number.re, inp[2].number.re));
+  } }),
+  new MathFunc("randErlang(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"W","R0+"}, new String[] {"shape","λ"}, "randomize Erlang");
+    
+    return new MathObj(randErlang((int)inp[0].number.re, inp[1].number.re));
+  } }),
+  
+  new MathFunc("tPDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","R0+"}, new String[] {"input","ν"}, "evaluate Student's T PDF");
+    
+    return new MathObj(tPDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("tCDF(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"input","ν"}, "evaluate Student's T CDF");
+    
+    return new MathObj(tCDF(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("qT(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"R","W"}, new String[] {"area","ν"}, "evaluate Student's T quantile");
+    
+    return new MathObj(qT(inp[0].number.re, (int)inp[1].number.re));
+  } }),
+  new MathFunc("randT(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"W"}, new String[] {"ν"}, "randomize Student's T");
+    
+    return new MathObj(randT((int)inp[0].number.re));
+  } }),
+  
+  new MathFunc("cauchyPDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(params, new String[] {"R","R","R+"}, new String[] {"input","x₀","γ"}, "evaluate Cauchy PDF");
+    
+    return new MathObj(cauchyPDF(params[0].number.re,params[1].number.re,params[2].number.re));
+  } }),
+  new MathFunc("cauchyCDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(inp, new String[] {"R","R","R+"}, new String[] {"input","x₀","γ"}, "evaluate Cauchy CDF");
+    
+    return new MathObj(cauchyCDF(params[0].number.re,params[1].number.re,params[2].number.re));
+  } }),
+  new MathFunc("qCauchy(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(inp, new String[] {"R","R","R+"}, new String[] {"area","x₀","γ"}, "evaluate Cauchy quantile");
+    
+    return new MathObj(qCauchy(params[0].number.re,params[1].number.re,params[2].number.re));
+  } }),
+  new MathFunc("randCauchy(","c?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {new MathObj(0),new MathObj(1)});
+    enforceParamTypes(inp, new String[] {"R","R+"}, new String[] {"x₀","γ"}, "randomize Cauchy");
+    
+    return new MathObj(randCauchy(params[0].number.re,params[1].number.re));
+  } }),
+  
+  new MathFunc("geomPMF(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","R"}, new String[] {"input","p"}, "evalute geometric PMF");
+    if(params[1].number.re<0 || params[1].number.re>1) { throw new CalculationException("Cannot evalute geometric PMF with p outside [0,1]"); }
+    
+    return new MathObj(params[0].number.isInt() ? geomPMF((int)params[0].number.re, params[1].number.re) : 0);
+  } }),
+  new MathFunc("geomCDF(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","R"}, new String[] {"input","p"}, "evalute geometric CDF");
+    if(params[1].number.re<0 || params[1].number.re>1) { throw new CalculationException("Cannot evalute geometric CDF with p outside [0,1]"); }
+    
+    return new MathObj(geomCDF((int)Math.floor(params[0].number.re), params[1].number.re));
+  } }),
+  new MathFunc("qGeom(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","R"}, new String[] {"area","p"}, "evalute geometric quantile");
+    if(params[1].number.re<0 || params[1].number.re>1) { throw new CalculationException("Cannot evalute geometric quantile with p outside [0,1]"); }
+    
+    return new MathObj(qGeom(params[0].number.re, params[1].number.re));
+  } }),
+  new MathFunc("randGeom(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R"}, new String[] {"p"}, "randomize geometric distribution");
+    if(params[0].number.re<0 || params[0].number.re>1) { throw new CalculationException("Cannot randomize geometric with p outside [0,1]"); }
+    
+    return new MathObj(randGeom(params[0].number.re));
+  } }),
+  
+  new MathFunc("negBinomPMF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"fails","passes","p"}, "evalute negative binomial PMF");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute negative binomial PMF with p outside [0,1]"); }
+    
+    return new MathObj(params[0].number.isInt() ? negBinomPMF((int)params[0].number.re, (int)params[1].number.re, params[2].number.re) : 0);
+  } }),
+  new MathFunc("negBinomCDF(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"fails","passes","p"}, "evalute negative binomial CDF");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute negative binomial CDF with p outside [0,1]"); }
+    
+    return new MathObj(negBinomCDF((int)Math.floor(params[0].number.re), (int)params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("qNegBinom(","ccc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"R","W","R"}, new String[] {"area","passes","p"}, "evalute negative binomial quantile");
+    if(params[2].number.re<0 || params[2].number.re>1) { throw new CalculationException("Cannot evalute negative binomial quantile with p outside [0,1]"); }
+    
+    return new MathObj(qNegBinom(params[0].number.re, (int)params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("randNegBinom(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0.5)});
+    enforceParamTypes(params, new String[] {"W","R"}, new String[] {"passes","p"}, "randomize negative binomial distribution");
+    if(params[1].number.re<0 || params[1].number.re>1) { throw new CalculationException("Cannot randomize negative binomial with p outside [0,1]"); }
+    
+    return new MathObj(randNegBinom((int)params[0].number.re, params[1].number.re));
+  } }),
+  
+  new MathFunc("logNormPDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(logNormPDF(params[0].number, params[1].number, params[2].number));
+  } }),
+  new MathFunc("logNormCDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(logNormCDF(params[0].number, params[1].number, params[2].number));
+  } }),
+  new MathFunc("qLogNorm(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(qLogNorm(params[0].number, params[1].number, params[2].number));
+  } }),
+  new MathFunc("randLogNorm(","c?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {new MathObj(0),new MathObj(1)});
+    
+    return new MathObj(randLogNorm(params[0].number, params[1].number));
+  } }),
+  
+  new MathFunc("laplacePDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(params, new String[] {"R","R","R+"}, new String[] {"input","μ","b"}, "evaluate Laplace PDF");
+    
+    return new MathObj(laplacePDF(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("laplaceCDF(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(params, new String[] {"R","R","R+"}, new String[] {"input","μ","b"}, "evaluate Laplace CDF");
+    
+    return new MathObj(laplaceCDF(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("qLaplace(","cc?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(0),new MathObj(1)});
+    enforceParamTypes(params, new String[] {"R","R","R+"}, new String[] {"area","μ","b"}, "evaluate Laplace quantile");
+    
+    return new MathObj(qLaplace(params[0].number.re, params[1].number.re, params[2].number.re));
+  } }),
+  new MathFunc("randLaplace(","c?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {new MathObj(0),new MathObj(1)});
+    enforceParamTypes(params, new String[] {"R","R+"}, new String[] {"μ","b"}, "randomize Laplace distribution");
+    
+    return new MathObj(randLaplace(params[0].number.re, params[1].number.re));
+  } }),
+  
+  new MathFunc("Mean(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] arr = new Complex[inp.length];
+    for(int n=0;n<inp.length;n++) { arr[n] = inp[n].number; }
+    return new MathObj(mean(arr));
+  } }),
+  new MathFunc("Var(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] arr = new Complex[inp.length];
+    for(int n=0;n<inp.length;n++) { arr[n] = inp[n].number; }
+    return new MathObj(variance(arr,true));
+  } }),
+  new MathFunc("Std(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] arr = new Complex[inp.length];
+    for(int n=0;n<inp.length;n++) { arr[n] = inp[n].number; }
+    return new MathObj(std(arr,true));
+  } }),
+  new MathFunc("Range(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] arr = new Complex[inp.length];
+    for(int n=0;n<inp.length;n++) { arr[n] = inp[n].number; }
+    return new MathObj(range(arr));
+  } }),
+  new MathFunc("Med(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] arr = new Complex[inp.length];
+    for(int n=0;n<inp.length;n++) { arr[n] = inp[n].number; }
+    return new MathObj(median(arr));
+  } }),
+  new MathFunc("Quantile(","c+",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(new MathObj[] {inp[0]}, new String[] {"R"}, new String[] {"area"}, "evaluate set's quantile");
+    Complex[] arr = new Complex[inp.length-1];
+    for(int n=1;n<inp.length;n++) { arr[n-1] = inp[n].number; }
+    return new MathObj(quantile(inp[0].number.re,arr));
+  } }),
+  new MathFunc("cum(","c+",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(new MathObj[] {inp[0]}, new String[] {"W"}, new String[] {"degree"}, "Evaluate cumulants");
+    
+    Complex[] arr = new Complex[inp.length-1];
+    for(int n=1;n<inp.length;n++) { arr[n-1] = inp[n].number; }
+    Complex[] cums = cums(arr, (int)inp[0].number.re, true);
+    MathObj[] out = new MathObj[cums.length];
+    for(int n=0;n<cums.length;n++) { out[n] = new MathObj(cums[n]); }
+    
+    return new MathObj(out);
+  } }),
+  new MathFunc("nCum(","c+",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(new MathObj[] {inp[0]}, new String[] {"W"}, new String[] {"degree"}, "Evaluate normalized cumulants");
+    
+    Complex[] arr = new Complex[inp.length-1];
+    for(int n=1;n<inp.length;n++) { arr[n-1] = inp[n].number; }
+    Complex[] cums = normCums(arr, (int)inp[0].number.re, true);
+    MathObj[] out = new MathObj[cums.length];
+    for(int n=0;n<cums.length;n++) { out[n] = new MathObj(cums[n]); }
+    
+    return new MathObj(out);
+  } }),
+  new MathFunc("cum(","ca",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(new MathObj[] {inp[0]}, new String[] {"W"}, new String[] {"degree"}, "Evaluate cumulants");
+    
+    Complex[] arr = new Complex[inp[1].array.length];
+    for(int n=0;n<inp[1].array.length;n++) {
+      if(!inp[1].array[n].isNum()) { throw new CalculationException("Cannot evaluate cumulants for non-numerical array"); }
+      arr[n] = inp[1].array[n].number;
+    }
+    Complex[] cums = cums(arr, (int)inp[0].number.re, true);
+    MathObj[] out = new MathObj[cums.length];
+    for(int n=0;n<cums.length;n++) { out[n] = new MathObj(cums[n]); }
+    
+    return new MathObj(out);
+  } }),
+  new MathFunc("nCum(","ca",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(new MathObj[] {inp[0]}, new String[] {"W"}, new String[] {"degree"}, "Evaluate normalized cumulants");
+    
+    Complex[] arr = new Complex[inp[1].array.length];
+    for(int n=0;n<inp[1].array.length;n++) {
+      if(!inp[1].array[n].isNum()) { throw new CalculationException("Cannot evaluate normalized cumulants for non-numerical array"); }
+      arr[n] = inp[1].array[n].number;
+    }
+    Complex[] cums = normCums(arr, (int)inp[0].number.re, true);
+    MathObj[] out = new MathObj[cums.length];
+    for(int n=0;n<cums.length;n++) { out[n] = new MathObj(cums[n]); }
+    
+    return new MathObj(out);
+  } }),
+  new MathFunc("linReg(","vv",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Complex[] x = inp[0].vector.elements, y = inp[1].vector.elements;
+    
+    Complex[] linReg = linReg(x, y);
+    
+    return new MathObj(new MathObj[] {new MathObj(linReg[0]), new MathObj(linReg[1]), new MathObj(linReg[2])});
+  } }),
+  
+  
   new MathFunc("Factor(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //factoring
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"input"}, "factor");
     Complex num = inp[0].number; //grab input
-    if(!num.isInt()) { throw new CalculationException("Can only factor integers"); } //only accept positive integers
     
     short pow2 = 0; //first, for the sake of normalization to a long, we keep dividing by 2 until we have an odd number
     while(num.re >= 4503599627370496l) { num.re*=0.5; pow2++; } //repeatedly divide by 2 and increment the power
@@ -872,12 +1400,14 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
       else { throw new CalculationException("Cannot take GCF of non-integer(s)"); }
     }
     long gcf=0; try { gcf = gcf(ints); } //try taking the GCF
-    catch(ArithmeticException ex) { return new MathObj(new Complex(Double.POSITIVE_INFINITY)); } //if infinite, set it to be infinite
+    catch(ArithmeticException ex) { return new MathObj(Double.POSITIVE_INFINITY); } //if infinite, set it to be infinite
     
     int shift = min(shifts); //compute the minimum amount any number had to shift
     return new MathObj(new Complex(gcf).scalbeq(shift)); //set result to the GCF of all our inputs, multiplied by 2^(the smallest power of 2 anything had to multiply by)
   } }),
   new MathFunc("LCM(","c*",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //TODO TEST
+    if(inp.length==0) { return new MathObj(Cpx.one()); }
+    
     long[] ints = new long[inp.length]; //construct an array of all the inputs
     int[] shifts = new int[inp.length]; //this is to store how many times each input was divided by 2 to make it a valid 64-bit int
     for(int n=0;n<inp.length;n++) { //loop through all inputs
@@ -898,44 +1428,54 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     return new MathObj(lcm); //return result
   } }),
   new MathFunc("modInv(","cc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //TODO TEST
-    if(!inp[0].number.isInt() || !inp[1].number.isInt()) { //both inputs must be integers
-      throw new CalculationException("Cannot take inverse of "+inp[0].number+" mod "+inp[1].number+" (must both be integers)");
-    }
+    enforceParamTypes(inp, new String[] {"Z","Z"}, new String[] {"base","mod"}, "take modular inverse");
+    
     return new MathObj(modInv(Math.round(inp[0].number.re),Math.round(inp[1].number.re)));
   } }),
   new MathFunc("totient(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt()) { //input must be an integer
-      throw new CalculationException("Cannot take Euler's totient of "+inp[0].number+" (must be an integer)");
-    }
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"input"}, "take Euler's totient");
+    
     return new MathObj(totient(Math.round(inp[0].number.re)));
   } }),
   new MathFunc("modPow(","ccc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt() || !inp[1].number.isInt() || !inp[2].number.isInt()) { //all 3 inputs must be integers
-      throw new CalculationException("Cannot take "+inp[0].number+"^"+inp[1].number+" mod "+inp[2].number+" (must all be integers)");
-    }
+    enforceParamTypes(inp, new String[] {"Z","Z","Z"}, new String[] {"base","exponent","mod"}, "perform modular exponentiation");
+    
     return new MathObj(modPow(Math.round(inp[0].number.re),Math.round(inp[1].number.re),Math.round(inp[2].number.re)));
   } }),
   new MathFunc("discLog(","ccc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt() || !inp[1].number.isInt() || !inp[2].number.isInt()) { //all 3 inputs must be integers
-      throw new CalculationException("Cannot take log_"+inp[0].number+"("+inp[1].number+") mod "+inp[2].number+" (must all be integers)");
-    }
+    enforceParamTypes(inp, new String[] {"Z","Z","Z"}, new String[] {"base","input","mod"}, "take discrete logarithm");
+    
     Long log = discLog_babyGiant((long)inp[0].number.re, (long)inp[1].number.re, (long)inp[2].number.re, carmichael((long)inp[2].number.re));
     if(log==null) { throw new CalculationException("Logarithm does not exist"); }
-    else          { return new MathObj(new Complex(log)); }
+    else          { return new MathObj(log); }
   } }),
   new MathFunc("carmichael(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    if(!inp[0].number.isInt()) { //input must be an integer
-      throw new CalculationException("Cannot take Carmichael's totient of "+inp[0].number+" (must be an integer)");
-    }
+    enforceParamTypes(inp, new String[] {"Z"}, new String[] {"input"}, "take Carmichael's totient");
+    
     return new MathObj(carmichael(Math.round(inp[0].number.re)));
+  } }),
+  new MathFunc("CRT(","aa",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    long[] rems = new long[inp[0].array.length], mods = new long[inp[1].array.length];
+    if(rems.length!=mods.length) { throw new CalculationException("Cannot compute Chinese Remainder Theorem with "+rems.length+" remainders and "+mods.length+" moduli"); }
+    
+    for(int i=0;i<rems.length;i++) {
+      if(!inp[0].array[i].isNum() || !inp[1].array[i].isNum()) { throw new CalculationException("Cannot compute Chinese Remainder Theorem with non-numeric inputs"); }
+      if(!inp[0].array[i].number.isInt() || !inp[1].array[i].number.isInt()) { throw new CalculationException("Unable to compute Chinese Remainder Theorem with non-integer inputs"); }
+      
+      rems[i] = Math.round(inp[0].array[i].number.re); //grab remainder and modulo
+      mods[i] = Math.round(inp[1].array[i].number.re);
+    }
+    
+    long[] result = crt(rems, mods);
+    
+    return new MathObj(false, result[0]+"+"+result[1]+"n");
   } }),
   
   new MathFunc("toMixed(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    double err = 9.5367431640625e-7d;
-    if(inp.length==2) {
-      if(inp[1].number.im!=0) { throw new CalculationException("Cannot convert to mixed number using non-real epsilon "+inp[1]); }
-      err = inp[1].number.re;
-    }
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(9.5367431640625e-7d)});
+    enforceParamTypes(params, new String[] {"","R"}, new String[] {"","epsilon"}, "convert to mixed number");
+    
+    double err = params[1].number.re;
     
     long[] realPart = toMixed(inp[0].number.re, err);
     long[] imagPart = toMixed(inp[0].number.im, err);
@@ -946,11 +1486,10 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("toFrac(","cc?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    double err = 9.5367431640625e-7d;
-    if(inp.length==2) {
-      if(inp[1].number.im!=0) { throw new CalculationException("Cannot convert to mixed number using non-real epsilon "+inp[1]); }
-      err = inp[1].number.re;
-    }
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,new MathObj(9.5367431640625e-7d)});
+    enforceParamTypes(params, new String[] {"","R"}, new String[] {"","epsilon"}, "convert to fraction");
+    
+    double err = params[1].number.re;
     
     long[] realPart = toMixed(inp[0].number.re, err); realPart[1] += realPart[0]*realPart[2]; realPart[0]=0;
     long[] imagPart = toMixed(inp[0].number.im, err); imagPart[1] += imagPart[0]*imagPart[2]; imagPart[0]=0;
@@ -1012,78 +1551,78 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     return new MathObj();
   } }),
   
+  new MathFunc("throw(","",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    throw new CalculationException("Exception Thrown");
+  } }),
+  
   new MathFunc("BuildVec(","cVe",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //size, variable, equation
+    enforceParamTypes(inp, new String[] {"W","",""}, new String[] {"size"}, "build vector");
+    
     String vari = inp[1].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
-    if(inp[0].isNum() && inp[0].number.isWhole()) { //if the size is a whole integer
-      int siz = (int)inp[0].number.re;  //record the size of the array
-      Complex[] arr = new Complex[siz]; //create array of appropriate length
-      for(int n=0;n<siz;n++) {                         //loop through all elements of the array
-        map2.put(vari, new MathObj(new Complex(n+1))); //set the variable to our current index
-        MathObj term = inp[2].equation.solve(map2);    //solve at this index
-        if(term.isNum()) { arr[n] = term.number; }     //if evaluates to number, put that number at this index
-        else { throw new CalculationException("Cannot build vector with element of type "+term.type); } //otherwise, return error message
-      }
-      return new MathObj(new CVector(arr)); //now that all the elements are created, return the result
+    int siz = (int)inp[0].number.re;  //record the size of the array
+    Complex[] arr = new Complex[siz]; //create array of appropriate length
+    for(int n=0;n<siz;n++) {                         //loop through all elements of the array
+      map2.put(vari, new MathObj(n+1)); //set the variable to our current index
+      MathObj term = inp[2].equation.solve(map2);    //solve at this index
+      if(term.isNum()) { arr[n] = term.number; }     //if evaluates to number, put that number at this index
+      else { throw new CalculationException("Cannot build vector with element of type "+term.type); } //otherwise, return error message
     }
-    else { throw new CalculationException("Cannot build vector of size "+inp[0]); } //if not a whole integer, return error message
+    return new MathObj(new CVector(arr)); //now that all the elements are created, return the result
   } }),
   
   new MathFunc("BuildArray(","cVe",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //size, variable, equation
+    enforceParamTypes(inp, new String[] {"W","",""}, new String[] {"size"}, "build array");
+    
     String vari = inp[1].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
-    if(inp[0].isNum() && inp[0].number.isWhole()) { //if the size is a whole integer
-      int siz = (int)inp[0].number.re;  //record the size of the array
-      MathObj[] arr = new MathObj[siz]; //create array of appropriate length
-      for(int n=0;n<siz;n++) {                         //loop through all elements of the array
-        map2.put(vari, new MathObj(new Complex(n)));   //set the variable to our current index
-        MathObj term = inp[2].equation.solve(map2);    //solve at this index
-        arr[n] = term;                                 //set this element
-      }
-      return new MathObj(arr); //now that all the elements are created, return the result
+    int siz = (int)inp[0].number.re;  //record the size of the array
+    MathObj[] arr = new MathObj[siz]; //create array of appropriate length
+    for(int n=0;n<siz;n++) {                         //loop through all elements of the array
+      map2.put(vari, new MathObj(n));   //set the variable to our current index
+      MathObj term = inp[2].equation.solve(map2);    //solve at this index
+      arr[n] = term;                                 //set this element
     }
-    else { throw new CalculationException("Cannot build array of size "+inp[0]); } //if not a whole integer, return error message
+    return new MathObj(arr); //now that all the elements are created, return the result
   } }),
   
   new MathFunc("BuildMat1(","ccVVe",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //height, width, row var, column var, scalar equation
+    enforceParamTypes(inp, new String[] {"W","W","",""}, new String[] {"height","width"}, "build matrix");
+    
     String var1 = inp[2].variable, var2 = inp[3].variable; //record the variables that represent the indices
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
-    if(inp[0].isNum() && inp[1].isNum() && inp[0].number.isWhole() && inp[1].number.isWhole()) { //ensure dimensions are whole integers
-      int hig = (int)inp[0].number.re, wid = (int)inp[1].number.re; //record the size of the matrix
-      Complex[][] arr = new Complex[hig][wid];        //create array of appropriate size
-      for(int i=0;i<hig;i++) for(int j=0;j<wid;j++) { //loop through all elements of the matrix
-        map2.put(var1, new MathObj(new Complex(i+1))); //set the row variable
-        map2.put(var2, new MathObj(new Complex(j+1))); //set the column variable
-        MathObj term = inp[4].equation.solve(map2);    //solve at these indices
-        if(term.isNum()) { arr[i][j] = term.number; }  //if evaluates to number, put that number at this index
-        else { throw new CalculationException("Cannot build matrix with element of type "+term.type); } //otherwise, return error message
-      }
-      return new MathObj(new CMatrix(hig,wid,arr)); //create and return matrix
+    int hig = (int)inp[0].number.re, wid = (int)inp[1].number.re; //record the size of the matrix
+    Complex[][] arr = new Complex[hig][wid];        //create array of appropriate size
+    for(int i=0;i<hig;i++) for(int j=0;j<wid;j++) { //loop through all elements of the matrix
+      map2.put(var1, new MathObj(i+1)); //set the row variable
+      map2.put(var2, new MathObj(j+1)); //set the column variable
+      MathObj term = inp[4].equation.solve(map2);    //solve at these indices
+      if(term.isNum()) { arr[i][j] = term.number; }  //if evaluates to number, put that number at this index
+      else { throw new CalculationException("Cannot build matrix with element of type "+term.type); } //otherwise, return error message
     }
-    else { throw new CalculationException("Cannot build matrix of size "+inp[0]+"x"+inp[1]); } //if provided dimensions are invalid, return error message
+    return new MathObj(new CMatrix(hig,wid,arr)); //create and return matrix
   } }),
   
   new MathFunc("BuildMat2(","ccVe",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException { //height, width, row var, vector equation
+    enforceParamTypes(inp, new String[] {"W","W","",""}, new String[] {"height","width"}, "build matrix");
+    
     String vari = inp[2].variable; //record the variable that represents the row
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
-    if(inp[0].isNum() && inp[1].isNum() && inp[0].number.isWhole() && inp[1].number.isWhole()) { //ensure dimensions are whole integers
-      int hig = (int)inp[0].number.re, wid = (int)inp[1].number.re; //record the size of the matrix
-      CVector[] arr = new CVector[hig];                             //create array of appropriate size
-      for(int i=0;i<hig;i++) { //loop through all rows of the matrix
-        map2.put(vari, new MathObj(new Complex(i+1))); //set the row variable
-        MathObj term = inp[3].equation.solve(map2);    //solve at this index
-        if(!term.isVector()) { throw new CalculationException("Cannot build matrix with rows of type "+term.type); } //if not a vector, return error message
-        if(term.vector.size()!=wid) { throw new CalculationException("Cannot build matrix with inconsistent width"); } //if row size is inconsistent, return error message
-        arr[i] = term.vector; //otherwise, set each row
-      }
-      if(hig==0) { return new MathObj(new CMatrix(0,wid)); } //if height is 0, return 0xw matrix
-      else { return new MathObj(new CMatrix(arr)); } //otherwise, construct matrix from vectors
+    int hig = (int)inp[0].number.re, wid = (int)inp[1].number.re; //record the size of the matrix
+    CVector[] arr = new CVector[hig];                             //create array of appropriate size
+    for(int i=0;i<hig;i++) { //loop through all rows of the matrix
+      map2.put(vari, new MathObj(i+1)); //set the row variable
+      MathObj term = inp[3].equation.solve(map2);    //solve at this index
+      if(!term.isVector()) { throw new CalculationException("Cannot build matrix with rows of type "+term.type); } //if not a vector, return error message
+      if(term.vector.size()!=wid) { throw new CalculationException("Cannot build matrix with inconsistent width"); } //if row size is inconsistent, return error message
+      arr[i] = term.vector; //otherwise, set each row
     }
-    else { throw new CalculationException("Cannot build matrix of size "+inp[0]+"x"+inp[1]); } //if provided dimensions are invalid, return error message
+    if(hig==0) { return new MathObj(new CMatrix(0,wid)); } //if height is 0, return 0xw matrix
+    else { return new MathObj(new CMatrix(arr)); } //otherwise, construct matrix from vectors
   } }),
   
   new MathFunc("Σ(","Vcce",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
@@ -1126,6 +1665,7 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
       else switch(term.type) {
         case COMPLEX: result.number.muleq(term.number); break;
         case MATRIX : result.matrix = result.matrix.mul(term.matrix); break;
+        case POLY   : result.poly   = result.poly.mul(term.poly); break;
         default     : throw new CalculationException("Cannot perform product over "+term.type);
       }
     }
@@ -1173,16 +1713,15 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }), new MathFunc("OR(","Vcce",tempFunc),
   
   new MathFunc("d/dx(","Vcec?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,new MathObj(9.765625e-4d),new MathObj(2)});
+    enforceParamTypes(params, new String[] {"","","","","N"}, new String[] {"","","","","degree"}, "approximate derivative");
+    
     String vari = inp[0].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the mapper
     
     Complex input = inp[1].number; //grab the value we're evaluating at
-    Complex epsilon = inp.length>=4 ? inp[3].number : new Complex(9.765625E-4D); //if we have at least 4 inputs, we've chosen the epsilon. Otherwise, default it to something reasonably small
-    int method = 2;     //now we must select the number of units we will step away from the middle. For every one unit we step away, we use 2 more samples. By default, we only take 4 samples
-    if(inp.length>=5) { //if we have at least 5 inputs, the 5th one is the method we use
-      if(inp[4].number.isNatural()) { method = (int)inp[4].number.re; } //if given a (positive) int, cast to an int and make that our method
-      else { throw new CalculationException("Cannot approximate derivative with a polynomial of non-positive degree"); } //if given a non-positive number, return an error
-    }
+    Complex epsilon = params[3].number; //grab the epsilon
+    int method = (int)params[4].number.re; //the number of units we will step away from the middle. For every one unit we step away, we use 2 more samples.
     
     MathObj result = new MathObj(); //initialize our result to an ambiguous math object, since we don't yet know if our result will be a scalar, vector, etc.
     double coef = -1; //our coefficient for each sample k*epsilon from the center will be (-1)^(k+1)*m!²/(k(m+k)!(m-k)!*epsilon). This will assist us in calculating that, but won't actually be that coefficient
@@ -1205,16 +1744,15 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     return result;         //return result
   } }),
   new MathFunc("d²/dx²(","Vcec?c?",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,new MathObj(9.765625e-4d),new MathObj(2)});
+    enforceParamTypes(params, new String[] {"","","","","N"}, new String[] {"","","","","degree"}, "approximate 2nd derivative");
+    
     String vari = inp[0].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the mapper
     
     Complex input = inp[1].number; //grab the value we're evaluating at
-    Complex epsilon = inp.length>=4 ? inp[3].number : new Complex(9.765625E-4D); //if we have at least 4 inputs, we've chosen the epsilon. Otherwise, default it to something reasonably small
-    int method = 2;     //now we must select the number of units we will step away from the middle. For every one unit we step away, we use 2 more samples. By default, we only take 5 samples
-    if(inp.length>=5) { //if we have at least 5 inputs, the 5th one is the method we use
-      if(inp[4].number.isNatural()) { method = (int)inp[4].number.re; } //if given a (positive) int, cast to an int and make that our method
-      else { throw new CalculationException("Cannot approximate 2nd derivative with a polynomial of non-positive degree"); } //if given a non-positive number, return an error
-    }
+    Complex epsilon = params[3].number; //grab the epsilon
+    int method = (int)params[4].number.re; //the number of units we will step away from the middle. For every one unit we step away, we use 2 more samples.
     
     map2.put(vari,new MathObj(input)); MathObj y0 = inp[2].equation.solve(map2); //find the value right at the middle
     
@@ -1246,13 +1784,12 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     String vari = inp[1].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the mapper
     
-    Complex input = inp[2].number; //grab the value we're evaluating at
-    Complex epsilon = inp.length>=5 ? inp[4].number : new Complex(/*9.765625E-4D*/Math.scalb(1d,Math.round(-13f/n))); //if we have at least 5 inputs, we've chosen the epsilon.
-    int method = ((n+1)>>1)+1; //now we must select the number of units we will step away from the middle. For every one unit we step away, we use 2 more samples. By default, we only take n+2 samples
-    if(inp.length>=6) { //if we have at least 6 inputs, the 6th one is the one we use
-      if(inp[5].number.isNatural()) { method = (int)inp[5].number.re; } //if given a (positive) int, cast to an int and make that our method
-      else { throw new CalculationException("Cannot approximate nth derivative with a polynomial of non-positive degree"); } //if given a non-positive number, return an error
-    }
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,new MathObj(Math.scalb(1d,Math.round(-13f/n))),new MathObj(((n+1)>>1)+1)});
+    enforceParamTypes(params, new String[] {"","","","","","N"}, new String[] {"","","","","","degree"}, "approximate nth derivative");
+    
+    Complex input = params[2].number; //grab the value we're evaluating at
+    Complex epsilon = params[4].number; //grab the epsilon
+    int method = (int)params[5].number.re; //grab our polynomial degree
     
     double[] gen = new double[(n+1)>>1]; //coefficients used to generate the actual coefficients
     for(int p=0;p<gen.length;p++) {
@@ -1297,81 +1834,15 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     return result.diveq(epsilon.pow(n));
   } }), new MathFunc("d^n/dx^n(","cVcec?c?",tempFunc),
   
-  /*new MathFunc("∫(","Vccec?c?",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
-    String vari = inp[0].variable; //record the variable we're plugging into
-    HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the mapper
-    
-    int samples = 16; //how many smaller sections we'll split our integral into (16 by default)
-    if(inp.length>=5) { //if we specify how many sections, set number of sections
-      if(inp[4].number.isNatural()) { samples = (int)inp[4].number.re; } //if valid, set the number of sections
-      else { return new MathObj("Cannot approximate integral using "+inp[2].number+" samples"); } //otherwise, return error message
-    }
-    
-    int method = 2; //the degree of the polynomial we will use to approximate our integral (0=Riemann sum, 1=trapezoid rule, 2=Simpson's 1/3, etc.). By default we use Simpson's rule to integrate
-    if(inp.length>=6) { //if we specify what method we use, use that method
-      if(inp[5].number.isWhole()) { method = (int)inp[5].number.re; } //if valid, use that method
-      else { return new MathObj("Cannot approximate integral using degree "+inp[3].number+" polynomial"); } //otherwise, return error message
-    }
-    
-    double[] coef; //coefficients for our integral. Depends on the integration method
-    switch(method) {
-      case 0: coef = new double[] {1,0}; break; //Left-handed Riemann Sum
-      case 1: coef = new double[] {0.5,0.5}; break; //Trapezoid rule
-      case 2: coef = new double[] {1d/6,4d/6,1d/6}; break; //Simpson's 1/3 rule
-      case 3: coef = new double[] {0.125,0.375,0.375,0.125}; break; //Simpson's 3/8 rule
-      case 4: coef = new double[] {7d/90,32d/90,12d/90,32d/90,7d/90}; break; //Boole's rule
-      case 5: coef = new double[] {19d/288,75d/288,50d/288,50d/288,75d/288,19d/288}; break;
-      case 6: coef = new double[] {41d/840,216d/840,27d/840,272d/840,27d/840,216d/840,41d/840}; break;
-      case 7: coef = new double[] {751d/17280,3577d/17280,1323d/17280,2989d/17280,2989d/17280,1323d/17280,3577d/17280,751d/17280}; break;
-      case 8: coef = new double[] {989d/28350,5888d/28350,-928d/28350,10496d/28350,-4540d/28350,10496d/28350,-928d/28350,5888d/28350,989d/28350}; break;
-      case 9: coef = new double[] {2857d/89600,15741d/89600,1080d/89600,19344d/89600,5778d/89600,5778d/89600,19344d/89600,1080d/89600,15741d/89600,2857d/89600}; break;
-      case 10: coef = new double[] {16067d/598752,106300d/598752,-48525d/598752,272400d/598752,-260550d/598752,427368d/598752,-260550d/598752,272400d/598752,-48525d/598752,106300d/598752,16067d/598752}; break;
-      default: {
-        return new MathObj("Okay, you got me, I haven't yet programmed in the ability to numerically integrate with a polynomial of degree 11 or higher.");
-      }
-    }
-    
-    MathObj result = new MathObj(); //declare result, initialize to empty math object
-    double lerp1 = 1d/samples, lerp2 = method==0 ? lerp1 : lerp1/method;
-    for(int n=0;n<samples;n++) {
-      for(int k=0;k<coef.length-1;k++) {
-        Complex x = inp[1].number.mul(1-lerp1*n-lerp2*k).addeq(inp[2].number.mul(lerp1*n+lerp2*k)); //compute current input value
-        map2.put(vari,new MathObj(x)); MathObj y = inp[3].equation.solve(map2);
-        
-        double coef2 = k==0 ? n==0 ? coef[0] : coef[0]+coef[coef.length-1] : coef[k];
-        y.muleq(coef2);
-        if(result.type == MathObj.VarType.NONE) { result = y; }
-        else                               { result.addeq(y); }
-      }
-    }
-    if(coef[coef.length-1]!=0) { //now, we just have to add the last term
-      map2.put(vari,inp[2]); MathObj y = inp[3].equation.solve(map2);
-      y.muleq(coef[coef.length-1]);
-      result.addeq(y);
-    }
-    
-    //Alright, we've performed the sum. Now, all that's left is to scale it by the correct amount
-    Complex scaledRange = inp[2].number.sub(inp[1].number).muleq(lerp1); //compute the range, then divide by the number of samples
-    result.muleq(scaledRange); //multiply result by scaled range
-    
-    return result; //return the result
-  } }), new MathFunc("Integral(","Vccec?c?",tempFunc)//*/
-  
   new MathFunc("∫(","Vccec?c?",tempFunc=new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,new MathObj(16),new MathObj(2)});
+    enforceParamTypes(params, new String[] {"","","","","N","W"}, new String[] {"","","","","samples","method"}, "approximate integral");
+    
     String vari = inp[0].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the mapper
     
-    int samples = 16; //how many smaller sections we'll split our integral into (16 by default)
-    if(inp.length>=5) { //if we specify how many sections, set number of sections
-      if(inp[4].number.isNatural()) { samples = (int)inp[4].number.re; } //if valid, set the number of sections
-      else { throw new CalculationException("Cannot approximate integral using "+inp[2].number+" samples"); } //otherwise, return error message
-    }
-    
-    int method = 2; //the degree of the polynomial we will use to approximate our integral (0=Riemann sum, 1=trapezoid rule, 2=Simpson's 1/3, etc.). By default we use Simpson's rule to integrate
-    if(inp.length>=6) { //if we specify what method we use, use that method
-      if(inp[5].number.isWhole()) { method = (int)inp[5].number.re; } //if valid, use that method
-      else { throw new CalculationException("Cannot approximate integral using degree "+inp[3].number+" polynomial"); } //otherwise, return error message
-    }
+    int samples = (int)params[4].number.re; //how many smaller sections we'll split our integral into
+    int method = (int)params[5].number.re; //the degree of the polynomial we will use to approximate our integral
     
     double[] coef; //coefficients for our integral. Depends on the integration method
     switch(method) {
@@ -1433,16 +1904,15 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }), new MathFunc("Integral(","Vccec?c?",tempFunc),
   
   new MathFunc("limit(","Vcec?c?",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,new MathObj(9.765625e-4d),new MathObj(2)});
+    enforceParamTypes(params,new String[] {"","","","","W"},new String[] {"","","","","degree"}, "approximate limit");
+    
     String vari = inp[0].variable; //record the variable we're plugging into
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
-    Complex input = inp[1].number; //grab the value we're evaluating at
-    Complex epsilon = inp.length>=4 ? inp[3].number : new Complex(9.765625E-4D); //if we have at least 4 inputs, we've chosen the epsilon. Otherwise, default it to something reasonably small
-    int method = 2; //now we must select the number of units we will step away from the middle
-    if(inp.length>=5) { //if we have at least 5 inputs, the 4th one is the method we use
-      if(inp[4].number.isWhole()) { method = (int)inp[4].number.re; } //if given a (non-negative) int, cast to an int and make that our method
-      else { throw new CalculationException("Cannot approximate limit with a polynomial of non-whole degree"); } //if given a non-whole number, return an error
-    }
+    Complex input = params[1].number; //grab the value we're evaluating at
+    int method = (int)params[4].number.re; //grab the polynomial degree
+    Complex epsilon = params[3].number; //grab the epsilon
     
     MathObj result = new MathObj(); //initialize our result to an ambiguous math object, since we don't yet know if our result will be a scalar, vector, etc.
     double coef = -1; //the coefficient of each term, equal to (-1)^(k+1)*m!²/((m+k)!(m-k)!), with m being the method
@@ -1490,7 +1960,6 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
     double err = 0;
-    //if(inp.length>=5) { err = inp[4].number.re; }
     
     int maxIter = 16; //maximum iterations
     Complex x = inp[1].number.copy(), y, yp; //x, y, y'
@@ -1513,7 +1982,6 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
     
     double err = 0;
-    //if(inp.length>=5) { err = inp[4].number.re; }
     
     int maxIter = 16;
     Complex x = inp[1].number.copy(), y, yp, ypp;
@@ -1533,14 +2001,13 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("Euler(","VVc.cec?", new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,null,null,new MathObj(16)});
+    enforceParamTypes(params, new String[] {"","","","","","","N"}, new String[] {"","","","","","","samples"}, "approximate Euler's method");
+    
     String inVar = inp[0].variable, outVar = inp[1].variable; //record the variables we're using
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
+    int samples = (int)params[6].number.re;
     
-    int samples = 16; //by default, we take 16 samples
-    if(inp.length>=7) { //if there are 7 or more inputs, the 7th specifies the number of samples
-      if(inp[6].number.isNatural()) { samples = (int)inp[6].number.re; } //if a positive integer, set the number of samples
-      else { throw new CalculationException("Cannot approximate Euler's method using "+inp[6].number+" samples"); } //otherwise, return an error
-    }
     Complex dx = inp[4].number.sub(inp[2].number).diveq(samples); //compute the change in the input each step
     
     Complex x = inp[2].number;           //get the initial input
@@ -1555,14 +2022,13 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("EulerMid(","VVc.cec?", new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,null,null,new MathObj(16)});
+    enforceParamTypes(params, new String[] {"","","","","","","N"}, new String[] {"","","","","","","samples"}, "approximate midpoint method");
+    
     String inVar = inp[0].variable, outVar = inp[1].variable; //record the variables we're using
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
+    int samples = (int)params[6].number.re;
     
-    int samples = 16; //by default, we take 16 samples
-    if(inp.length>=7) { //if there are 7 or more inputs, the 7th specifies the number of samples
-      if(inp[6].number.isNatural()) { samples = (int)inp[6].number.re; } //if a positive integer, set the number of samples
-      else { throw new CalculationException("Cannot approximate midpoint method using "+inp[6].number+" samples"); } //otherwise, return an error
-    }
     Complex dx = inp[4].number.sub(inp[2].number).diveq(samples); //compute the change in the input each step
     
     Complex x = inp[2].number;           //get the initial input
@@ -1581,18 +2047,17 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("ExpTrap(","VVc.cec?", new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    String inVar = inp[0].variable, outVar = inp[1].variable; //record the variables we're using
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,null,null,new MathObj(16)});
+    enforceParamTypes(params, new String[] {"","","","","","","N"}, new String[] {"","","","","","","samples"}, "approximate explicit trapezoid method");
+    
+    String inVar = params[0].variable, outVar = params[1].variable; //record the variables we're using
     HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
+    int samples = (int)params[6].number.re;
     
-    int samples = 16; //by default, we take 16 samples
-    if(inp.length>=7) { //if there are 7 or more inputs, the 7th specifies the number of samples
-      if(inp[6].number.isNatural()) { samples = (int)inp[6].number.re; } //if a positive integer, set the number of samples
-      else { throw new CalculationException("Cannot approximate explicit trapezoid method using "+inp[6].number+" samples"); } //otherwise, return an error
-    }
-    Complex dx = inp[4].number.sub(inp[2].number).diveq(samples); //compute the change in the input each step
+    Complex dx = params[4].number.sub(params[2].number).diveq(samples); //compute the change in the input each step
     
-    Complex x = inp[2].number;          //get the initial input
-    MathObj y = inp[3].passByValue(map);//and output
+    Complex x = params[2].number;          //get the initial input
+    MathObj y = params[3].passByValue(map);//and output
     for(int n=0;n<samples;n++) { //loop through all samples
       map2.put(inVar,new MathObj(x)); map2.put(outVar,y);              //set the values for our variables
       MathObj k1 = inp[5].equation.solve(map2);                        //solve the derivative at this point
@@ -1608,18 +2073,18 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
   } }),
   
   new MathFunc("RK4(","VVc.cec?", new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
-    String inVar = inp[0].variable, outVar = inp[1].variable; //record the variables we're using
-    HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
+    MathObj[] params = setDefaultParams(inp, new MathObj[] {null,null,null,null,null,null,new MathObj(16)});
+    enforceParamTypes(params, new String[] {"","","","","","","N"}, new String[] {"","","","","","","samples"}, "approximate Runge-Kutta method");
     
-    int samples = 16; //by default, we take 16 samples
-    if(inp.length>=7) { //if there are 4 or more inputs, the 4th specifies the number of samples
-      if(inp[6].number.isNatural()) { samples = (int)inp[6].number.re; } //if a positive integer, set the number of samples
-      else { throw new CalculationException("Cannot approximate Runge-Kutta method using "+inp[6].number+" samples"); } //otherwise, return an error
-    }
-    Complex dx = inp[4].number.sub(inp[2].number).diveq(samples); //compute the change in the input
+    String inVar = params[0].variable, outVar = params[1].variable; //record the variables we're using
+    HashMap<String, MathObj> map2 = (HashMap<String,MathObj>)map.clone(); //clone the map
+    int samples = (int)params[6].number.re;
+    
+    Complex dx = params[4].number.sub(inp[2].number).diveq(samples); //compute the change in the input
     
     Complex x = inp[2].number;          //get the initial input
     MathObj y = inp[3].passByValue(map);//and output
+    
     for(int n=0;n<samples;n++) { //loop through all samples
       map2.put(inVar,new MathObj(x)); map2.put(outVar,y); //set the values for our valuables
       MathObj k1 = inp[5].equation.solve(map2);           //solve the derivative at this point
@@ -1641,6 +2106,104 @@ public static FuncList functionDictionary = new FuncList( //this is a list of al
     
     return y; //finally, return our result
   } }),
+  
+  /////////////////////////////////////// CAS FUNCTIONS /////////////////////////////////////
+  //these have to go at the end so they have low priority compared to other things we can do with variables
+  
+  
+  new MathFunc("__-__","P",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.neg());
+  } }),
+  new MathFunc("²","P",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.sq());
+  } }),
+  new MathFunc("³","P",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.pow(3));
+  } }),
+  new MathFunc("+","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial sum = inp[0].poly.add(new Polynomial(new Object[][][] {{{inp[1].number.re,inp[1].number.im}}}));
+    return new MathObj(sum);
+  } }),
+  new MathFunc("+","cP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial sum = new Polynomial(new Object[][][] {{{inp[0].number.re,inp[0].number.im}}}).add(inp[1].poly);
+    return new MathObj(sum);
+  } }),
+  new MathFunc("-","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial diff = inp[0].poly.sub(new Polynomial(new Object[][][] {{{inp[1].number.re,inp[1].number.im}}}));
+    return new MathObj(diff);
+  } }),
+  new MathFunc("-","cP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial diff = new Polynomial(new Object[][][] {{{inp[0].number.re,inp[0].number.im}}}).sub(inp[1].poly);
+    return new MathObj(diff);
+  } }),
+  new MathFunc("+","PP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.add(inp[1].poly));
+  } }),
+  new MathFunc("-","PP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.sub(inp[1].poly));
+  } }),
+  new MathFunc("*","cP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial prod = inp[1].poly.mul(inp[0].number);
+    return new MathObj(prod);
+  } }),
+  new MathFunc("*","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial prod = inp[0].poly.mul(inp[1].number);
+    return new MathObj(prod);
+  } }),
+  new MathFunc("/","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial quot = inp[0].poly.div(inp[1].number);
+    return new MathObj(quot);
+  } }),
+  new MathFunc("\\","cP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial quot = inp[1].poly.div(inp[0].number);
+    return new MathObj(quot);
+  } }),
+  new MathFunc("/","cP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial inv = invSingleTermPoly(inp[1].poly, -1);
+    return new MathObj(inv.mul(inp[0].number));
+  } }),
+  new MathFunc("\\","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial inv = invSingleTermPoly(inp[0].poly, -1);
+    return new MathObj(inv.mul(inp[1].number));
+  } }),
+  new MathFunc("^","Pc",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    enforceParamTypes(inp, new String[] {"","Z"}, new String[] {"","exponent"}, "raise polynomial to scalar");
+    int power = (int)Math.round(inp[1].number.re);
+    
+    if(power<0) { //if the power is negative,
+      return new MathObj(invSingleTermPoly(inp[0].poly, power)); //Try raising it to that power. It'll only work if it only has a single term.
+    }
+    
+    Polynomial pow = inp[0].poly.pow(power);
+    return new MathObj(pow);
+  } }),
+  new MathFunc("*","PP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    return new MathObj(inp[0].poly.mul(inp[1].poly));
+  } }),
+  new MathFunc("/","PP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial inv = invSingleTermPoly(inp[1].poly, -1);
+    return new MathObj(inv.mul(inp[0].poly));
+  } }),
+  new MathFunc("\\","PP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Polynomial inv = invSingleTermPoly(inp[0].poly, -1);
+    return new MathObj(inv.mul(inp[1].poly));
+  } }),
+  new MathFunc("eval(","PcP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Term template = grabTemplateFromPoly(inp[0].poly);
+    
+    return new MathObj(inp[2].poly.plug(template, new Polynomial(new Object[][][] {{{inp[1].number.re,inp[1].number.im}}})));
+  } }),
+  new MathFunc("eval(","PPP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
+    Term template = grabTemplateFromPoly(inp[0].poly);
+    
+    return new MathObj(inp[2].poly.plug(template, inp[1].poly));
+  } }),
+  
+  new MathFunc("pDeriv(","VP",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) {
+    Polynomial deriv = inp[1].poly.partialDiff(inp[0].variable);
+    return new MathObj(deriv);
+  } }),
+  
   
   new MathFunc("SetHistoryDepth(","c",new Functional() { public MathObj func(HashMap<String, MathObj> map, MathObj... inp) throws CalculationException {
     if(inp[0].number.isInt() && inp[0].number.re>5 && inp[0].number.re<=5000) {
@@ -1671,8 +2234,8 @@ static class SimplePattern { //a class which compactifies & speeds up regex expr
   int size() { return min.length; } //returns the number of entries in this
   
   //used to map characters/variable types to bytes
-  static HashMap<Character, Byte> cMatcher = new HashMap<Character, Byte>() {{ put('b',(byte)0); put('c',(byte)1); put('v',(byte)2); put('m',(byte)3); put('d',(byte)4); put('a',(byte)5); put('e',(byte)6); put('M',(byte)7); put('N',(byte)8); put('V',(byte)9); }};
-  static EnumMap<MathObj.VarType, Byte> vMatcher = new EnumMap<MathObj.VarType, Byte>(MathObj.VarType.class) {{ put(MathObj.VarType.BOOLEAN,(byte)0); put(MathObj.VarType.COMPLEX,(byte)1); put(MathObj.VarType.VECTOR,(byte)2); put(MathObj.VarType.MATRIX,(byte)3); put(MathObj.VarType.DATE,(byte)4); put(MathObj.VarType.ARRAY,(byte)5); put(MathObj.VarType.EQUATION,(byte)6); put(MathObj.VarType.MESSAGE,(byte)7); put(MathObj.VarType.NONE,(byte)8); put(MathObj.VarType.VARIABLE,(byte)9); }};
+  static HashMap<Character, Byte> cMatcher = new HashMap<Character, Byte>() {{ put('b',(byte)0); put('c',(byte)1); put('v',(byte)2); put('m',(byte)3); put('d',(byte)4); put('a',(byte)5); put('e',(byte)6); put('M',(byte)7); put('N',(byte)8); put('V',(byte)9); put('P',(byte)10); }};
+  static EnumMap<MathObj.VarType, Byte> vMatcher = new EnumMap<MathObj.VarType, Byte>(MathObj.VarType.class) {{ put(MathObj.VarType.BOOLEAN,(byte)0); put(MathObj.VarType.COMPLEX,(byte)1); put(MathObj.VarType.VECTOR,(byte)2); put(MathObj.VarType.MATRIX,(byte)3); put(MathObj.VarType.DATE,(byte)4); put(MathObj.VarType.ARRAY,(byte)5); put(MathObj.VarType.EQUATION,(byte)6); put(MathObj.VarType.MESSAGE,(byte)7); put(MathObj.VarType.NONE,(byte)8); put(MathObj.VarType.VARIABLE,(byte)9); put(MathObj.VarType.POLY,(byte)10); }};
   
   SimplePattern(String r) { //compiles a regex string into a simple pattern
     ArrayList<Short> cpat = new ArrayList<Short>(), min2 = new ArrayList<Short>(), max2 = new ArrayList<Short>(); //arraylists to store everything
@@ -1753,7 +2316,7 @@ static class SimplePattern { //a class which compactifies & speeds up regex expr
   static short gen(char c) { return (short)(1<<cMatcher.get(c)); } //generates the short code for this
   static short gen(MathObj.VarType v) { return (short)(1<<vMatcher.get(v)); } //generates the short code for this
   
-  boolean matches(MathObj[] s, HashMap<String, MathObj> mapper) { //returns whether this array of variables matches this simple pattern
+  boolean matches(MathObj[] s, HashMap<String, MathObj> mapper, boolean modify) { //returns whether this array of variables matches this simple pattern
     if(s.length<absMin || s.length>absMax) { return false; } //short-circuit: if the expression is too short/too long, immediately return false
     
     int ind2=0; //the index in the string
@@ -1764,10 +2327,14 @@ static class SimplePattern { //a class which compactifies & speeds up regex expr
         if((gen(s[ind2].type)&charPat[ind1]) == 0) {   //if this character can't be consumed:
           if(!s[ind2].isVariable()) { return false; }  //if not a variable, then that's that, return false
           else { //otherwise, try dereferencing it once and see if that works
-            s[ind2] = mapper.get(s[ind2].variable);    //dereference
-            if(s[ind2]==null || (gen(s[ind2].type)&charPat[ind1]) == 0) { //if this character still can't be consumed, though, return false
-              return false;
+            MathObj deref = mapper.get(s[ind2].variable); //try dereferencing
+            if(deref!=null && (gen(deref.type)&charPat[ind1])!=0) { //if this points to a value that can be used here:
+              if(modify) { s[ind2] = deref; } //change this input to the dereferenced value
             }
+            else if((gen(MathObj.VarType.POLY)&charPat[ind1])!=0) { //otherwise, if polynomials can be used here:
+              if(modify) { s[ind2] = new MathObj(new Polynomial(new Object[][][] {{{1,0},{s[ind2].variable,1}}})); } //put a polynomial here
+            }
+            else { return false; } //otherwise, this cannot be used, so we return false
           }
         }
         //if(ind2==s.length || (gen(s[ind2].type)&charPat[ind1]) == 0) { return false; } //if this character can't be consumed, return false
@@ -1784,7 +2351,7 @@ static class SimplePattern { //a class which compactifies & speeds up regex expr
               break;
             }
             else {
-              s[ind2] = deref; //if it can be consumed, though, then make sure to change this variable to its value
+              if(modify) { s[ind2] = deref; } //if it can be consumed, though, then make sure to change this variable to its value
             }
           }
         }
@@ -1836,7 +2403,7 @@ static class SimplePattern { //a class which compactifies & speeds up regex expr
 static void transferVariables(HashMap<String, MathObj> from, HashMap<String, MathObj> to, String... exclude) { //this is used to keep changes made in one scope persistent in an outer scope
   //NOTE: If you ever plan on implementing threads into this calculator (key word: if), then this function might become obsolete, and you might instead want to have something that simply keeps different scopes synchronized
   
-  for(var iter : from.entrySet()) { //loop through all variables from the "from" scope
+  for(Map.Entry<String,MathObj> iter : from.entrySet()) { //loop through all variables from the "from" scope
     
     if(!to.containsKey(iter.getKey())) { //if this variable wasn't declared in the "to" scope
       continue; //skip this entry
@@ -1852,4 +2419,60 @@ static void transferVariables(HashMap<String, MathObj> from, HashMap<String, Mat
     
     to.put(iter.getKey(), iter.getValue()); //otherwise, transfer over the new value
   }
+}
+
+
+static MathObj[] setDefaultParams(MathObj[] inp, MathObj[] def) { //this takes a function with missing parameters and fills them with default values
+  MathObj[] result = new MathObj[def.length];
+  for(int n=0;n<def.length;n++) {
+    result[n] = (n<inp.length ? inp : def)[n];
+  }
+  return result;
+}
+
+static void enforceParamTypes(MathObj[] inp, String[] types, String[] paramNames, String function) throws CalculationException { //this function forces a function to have parameters take a specific form
+  for(int n=0;n<types.length;n++) {
+    String type;
+    switch(types[n]) {
+      case "C": type = inp[n].isNum()            ? null : "number";  break;
+      case "R": type = inp[n].number.isReal()    ? null : "real";    break;
+      case "R+": type = inp[n].number.re>0 && inp[n].number.im==0 ? null : "positive real"; break;
+      case "R0+": type = inp[n].number.re>=0 && inp[n].number.im==0 ? null : "non-negative real"; break;
+      case "R-": type = inp[n].number.re<0 && inp[n].number.im==0 ? null : "negative real"; break;
+      case "R0-": type = inp[n].number.re<=0 && inp[n].number.im==0 ? null : "non-positive real"; break;
+      case "Z": type = inp[n].number.isInt ()    ? null : "integer"; break;
+      case "W": type = inp[n].number.isWhole()   ? null : "whole";   break;
+      case "N": type = inp[n].number.isNatural() ? null : "natural"; break;
+      default: type = null;
+    }
+    if(type != null) {
+      throw new CalculationException("Cannot "+function+" with non-"+type+" "+paramNames[n]);
+    }
+  }
+}
+
+
+
+
+static Term grabTemplateFromPoly(Polynomial poly) throws CalculationException {
+  Term template = null;
+  if(poly.size()!=1) { throw new CalculationException("Cannot evaluate polynomial with a template with more than 1 term"); }
+  else for(Term t : poly) {
+    if(!poly.getCoef(t).equals(1)) {
+      throw new CalculationException("Cannot evaluate polynomial with a template with a non-one coefficient");
+    }
+    template = t;
+  }
+  return template;
+}
+
+static Polynomial invSingleTermPoly(Polynomial poly, int power) throws CalculationException {
+  if(poly.size()==1) { //then this can only be done if there's exactly one term
+    Polynomial pow = new Polynomial();
+    for(Term t : poly) {
+      pow.addTerm(poly.getCoef(t).pow(power), t.pow(power));
+    }
+    return pow;
+  }
+  else { throw new CalculationException("Rationals have not yet been implemented. Only single-term polynomials can be inverted."); }
 }

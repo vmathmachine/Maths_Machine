@@ -16,8 +16,8 @@ public static class Button extends Box {
   
   ClickProgressor progress = new ClickProgressor(); //tracks how the user interacts with it
   
-  boolean selectOnPress  =false , //if true, button only registers press if it was selected when you first clicked (if false, moving your mouse into the hitbox will always select it, so long as it's pressed and in button mode)
-          selectOnRelease=true ;  //if true, button only registers release if it was selected when you released it (if false, moving your mouse out of the hitbox won't deselect it)
+  boolean selectOnPress   =false, //if true, button only registers press if it was selected when you first clicked (if false, moving your mouse into the hitbox will always select it, so long as it's pressed and in button mode)
+          selectOnRelease = true; //if true, button only registers release if it was selected when you released it (if false, moving your mouse out of the hitbox won't deselect it)
   
   //example of button where select on press is false: most smartphone touch screen buttons, where you can press something, then move your cursor away as you realized you pressed the wrong button, then move your cursor back to the right button & press it
   //example of button where select on release is false: up and down arrows on a scroll bar. If you press those, then move your cursor, they stay pressed
@@ -25,6 +25,9 @@ public static class Button extends Box {
   HashMap<Cursor, Boolean> cursors = new HashMap<Cursor, Boolean>(); //list of cursors that are pressing this button, as well as 1 boolean to represent if the button is being held down by this cursor
   
   
+  
+  
+  static Button nullButt = new Button(); //button used just for representing a generic instance of Button
   
   //the 1s bit indicates it's hovered, 2s bit indicates it's pressed, and 4s bit indicates it's being held. 1 and 2 are mutually exclusive, while 4s bit implies 2s bit
   //the button is actually pressed if at least one entry is pressed. otherwise, it's hovered if at least one is hovered. otherwise, it's either disabled or dead
@@ -91,7 +94,72 @@ public static class Button extends Box {
   
   //////////////////////// REACTORS ////////////////////////////////
   
+  
+  @Override
+  boolean respondToChange(final UICursor curs, final byte code, boolean selected) {
+    if(progress.curr==State.DISABLED) { return false; } //if disabled, do nothing
+    
+    boolean isSelected = curs.getSelect() == this;
+    
+    switch(code) { //what we do here depends on the code we received
+      case 1: if(isSelected && !cursors.containsKey(curs)) { //if we're pressing, this is selected by the cursor, but our cursor list does not yet contain it
+        cursors.put(curs, true);     //push this cursor to the list, with hold being true
+        if(onPress != emptyAction) { //if there's an onPress action to perform
+          onPress.act();               //perform the onPress event
+          mmio.updatePressCount(this); //update (i.e. reset) the press counters for all other buttons
+        }
+        if(cursors.size()==1) { firstActivated = System.currentTimeMillis(); } //set the exact time when this button was pressed (unless another cursor already beat us to it)
+      } break;
+      case 0: { //if we're releasing:
+        if(isSelected) { //if this is (for now) the selected box
+          if(onRelease != emptyAction) {
+            onRelease.act();             //perform the onRelease event
+            ++pressCount;                //increment press counter
+            mmio.updatePressCount(this); //update the press counters for each button
+          }
+        }
+        cursors.remove(curs); //remove this cursor from the list
+      } break;
+      case 2: case 3: { //if we're moving or dragging:
+        Boolean hitbox = null;
+        if((isSelected || cursors.containsKey(curs)) && selectOnRelease && !(hitbox = hitboxNoMove(curs))) { //if this is selected by the cursor, the cursor is no longer in the hitbox, and we stop selecting when we exit the hitbox:
+          //cursors.remove(curs);                   //remove this cursor from the list
+          //curs.setSelectQuietly(Button.nullButt); //deselect this button while still staying in button-selecting mode
+          mmio.addPendingPostOperation(new Runnable() { public void run() {
+            cursors.remove(curs);                   //remove this cursor from the list
+            curs.setSelectQuietly(Button.nullButt); //deselect this button while still staying in button-selecting mode
+          } });
+          //TODO make sure this belongs in the post operations queue.
+        }
+        else if(!isSelected && !selectOnPress && (curs.getSelect() instanceof Button) && (hitbox==null ? hitboxNoMove(curs) : hitbox)) {
+          //if this button is not selected by the cursor, we're allowed to just jump in and start selecting w/out an initial press, the current cursor selection is a button, and the cursor is in the button's hitbox
+          
+          //cursors.put(curs,false);     //add this cursor to the list, but make it non-eligible for press-and-hold functionality
+          //curs.setSelectQuietly(this); //select this button
+          final Button butt = this;
+          mmio.addPendingPostOperation(new Runnable() { public void run() {
+            cursors.put(curs,false);     //add this cursor to the list, but make it non-eligible for press-and-hold functionality
+            curs.setSelectQuietly(butt); //select this button
+          } });
+          //TODO this should also be in the post operations queue. The reason for both of these facts is so that, if I...wait, is this really a problem?
+          //um...okay, so let's say I move my cursor from one button to another. What happens then? Does it depend which button is processed first?
+          
+          //look, just make sure this belongs in the post operations queue
+        }
+      } break;
+    }
+    
+    //finally, use the updated information to update the click progressor:
+    updateProgressor();
+    
+    //TODO make it so different mouse buttons can do different things
+    //TODO see what the heck selected is even still here for
+    return hitboxNoMove(curs);
+  }
+  
+  
   //returns whether the cursor is in its hitbox
+  /*@Override
   boolean respondToChange(final UICursor curs, final byte code, boolean selected) { //responds to change in the cursor (code tells us what kind of change. 0=release, 1=press, 2=move, 3=drag) (select tells us if the cursor is already touching something)
     if(progress.curr==State.DISABLED) { return false; } //if disabled, do nothing
     
@@ -132,7 +200,7 @@ public static class Button extends Box {
     
     //TODO make it so different mouse buttons can do different things
     return hitbox;
-  }
+  }*/
   //potential brainbending glitch: what happens if you do something with a button, then it disappears? Like, you scroll away and can no longer see it?
   
   

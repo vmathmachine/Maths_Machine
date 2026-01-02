@@ -1,29 +1,99 @@
-Removed huge bottleneck in text editing mechanism, vastly speeding up the calculator's overall performance (you should notice it takes less time for the calculator to open, to copy over large amounts of text, and to display answers that contain large amounts of text).
+=========== CALCULATOR BASED ================
 
-Added variables and variable assignment (i.e. v:=3. This now makes the calculator Turing complete). Such variables can then be used later. To unset a variable, simply use the function unset([variable name]).
+POLYNOMIALS:
 
-Added semicolon statement separator (i.e. v:=3; v+7 sets v to 3 and prints out 10)
+A new datatype "POLY" was added. This allows for you to represent multivariate polynomials. From there, you can add them, subtract them, multiply them, raise them to whole-number powers, plug in specific values for specific variables, and partial-differentiate them with respect to a specific variable.
 
-Added do, while, and for loops
+To create a polynomial, simply type out a polynomial using single-letter unused variable names. When the system sees a variable that hasn't been assigned a value (or one whose assigned value is incompatible with the current operation), it casts that variable to a polynomial. Note that e and i cannot be used as polynomials, as they're already taken.
 
-Added scope function (allowing you to define new variables in an isolated scope)
 
-Added the toFrac and toMixed functions, which convert the input into fractions or mixed numbers.
 
-Added randNorm, which generates a normal random variable (a random point on the bell curve).
 
-Added inverse error function.
+FUNCTIONS:
 
-Allowed the nCr function to work for larger values of n and r, provided they're both integers.
+== of numbers: ==
+Bernoulli numbers
+Bernoulli polynomials
+Chinese Remainder Theorem
 
-Added replace function for arrays, allowing for the editing of individual elements.
+A wide variety of statistical functions were added. This includes the PDF/PMF, CDF, quantile, and randomizer functions for several different distributions. It also includes functions that can calculate the mean, variance/std, range, median, arbitrary quantile, and arbitrary sample cumulants of a set of values, as well as one which calculates the line of best fit for a set of x's and a set of y's.
 
-Fixed bug where zeta function doesn't work at 0.
 
-Fixed bug where the calculator tries to perform operations on error messgaes...instead of just canceling everything and displaying the error message.
+== of matrices: ==
+² and ³
+frobenius inner product (as well as unconjugated inner product, "inner(")
+kernel (i.e. null space)
+jordan decomposition
 
-Made error messages less misleading (negation symbol is referred to as - instead of (-), ! symbol is referred to as ! instead of ~)
 
-Fixed bug where, if your answer is an array, and you exit and re-enter the app, Ans will no longer reference the array answer.
+== of arrays: ==
+elw, elw2, and elw3 were added, allowing you to perform elementwise operations on or between arrays
 
-Added support for newline and tab characters, treating them as whitespace. (Allows you to write code in a separate editor and copy-paste it into the calculator to run it without having to format it)
+== of variables: ==
+clearAllVars was added, allowing you to clear all set variables
+
+
+== for programming: ==
+
+the throw() function was added. This, as you can expect, throws an exception. This can be used if you want to force an operation to stop conditionally.
+
+
+
+GRAPHS:
+
+You can now toggle labels / axes in 2D graph mode.
+
+
+BUG FIXES:
+
+The LCM of an empty set is now 1, as it should be.
+
+Raising a matrix to the power of the biggest negative 32-bit integer previously caused a stack overflow error. This was because doing so would mean trying to negate the exponent, raise it to that power, and then invert it, but because negating that value yields the exact same value, this causes infinite recursion. This has now been fixed.
+
+Analytic functions can now be used on degenerate matrices (i.e. ones where algebraic and geometric multiplicity of eigenvalues don't match) thanks to Jordan decomposition.
+
+Previously, specific matrices (notably, [[0,1,0],[0,0,1],[1,0,0]]) would fail to generate their eigenvalues. The QR algorithm would just spiral into an infinite loop where it jumps back and forth between two equilibrium states instead of settling towards the state where QR=RQ and we can grab the eigenvalues. To fix this, a mechanism was added to detect loops and resolve them by nudging the matrix by an infinitesimal amount.
+
+
+============ OTHER =================
+
+GRAPHICAL:
+
+Made UI clipping render more efficiently
+
+
+
+UI LIBRARY:
+
+Edited UI engine to make it more consistent
+
+
+
+
+UI:
+
+Replaced Copy and Paste buttons with [ and ] (since now there is a copy paste interface, we don't need buttons for them anymore, and now we get dedicated buttons for making vectors / matrices)
+
+Moved the % (modulo) key from 2nd+/ to 2nd+▼
+
+When an equation is deleted, you can now undo its deletion via the "Recover" button which pops up in place of the "Delete" button when no equation is selected. The 3 most recently deleted equations will be saved for recovery. Unless you close the application.
+
+Buttons representing graphing features not yet implemented are grayed out (Trace, Roots, Max/Min).
+
+Vectors, matrices, and arrays now display with spaces between the commas to add visual clarity.
+
+
+
+
+MISC:
+
+Now, when you press on previous answers in the history menu, it copies over the exact value of that, not just whatever's there in text form. For more information on the specific mechanics of this change, please see the manual.
+
+CalculationException (what's used to give error messages) was sped up by removing the stack trace for that specific type of exception
+
+EnforceParamTypes was added as a more reliable way to track whether specific parameter types (such as whether a complex number input is an integer, if it has to be) are being passed correctly.
+
+Tries were implementing to allow for expressions to be more quickly tokenized. This allows the calculator to start up faster as less time is spent trying to evaluate equations as they load in, and allows for answers to be given slightly faster as less time is spent just tokenizing the expression.
+
+
+

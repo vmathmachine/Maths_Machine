@@ -1,7 +1,7 @@
 class CalcHistory { //class for storing the history of questions & answers
-  Textbox[] questions; //carousel array of all the questions that have been asked (newest to oldest)
-  Textbox[] answers; //carousel array of all the answers that have been answered
-  MathObj[] answerExact; //carousel array of all the answers, but stored as explicit numbers/math objects
+  Textbox[]   questions;   //carousel array of all the questions that have been asked (newest to oldest)
+  Textbox[]   answers;     //carousel array of all the answers that have been answered
+  MathObj[][] answerExact; //carousel array of all the answers, but stored as explicit numbers/math objects (2D arrays, one layer is used as pointers)
   int carousel = 0; //the carousel index: the index at which question 0 (the newest question) is stored
   int entries;      //the number of entries (usually fixed, but can sometimes be changed)
   float boxHeight, textSize; //the height of the boxes, the size of the text
@@ -18,7 +18,7 @@ class CalcHistory { //class for storing the history of questions & answers
       loadBaseSettingsFromDisk(this); //load it from the file
     }
     
-    questions = new Textbox[entries]; answers = new Textbox[entries]; answerExact = new MathObj[entries]; //initialize all 3 arrays
+    questions = new Textbox[entries]; answers = new Textbox[entries]; answerExact = new MathObj[entries][1]; //initialize all 3 arrays
     boxHeight = tboxH; textSize = tSize; //set the height for each textbox, the size of the text
     
     holder = new Panel(x,y,w,h,w,2*tboxH*entries); //create holder panel
@@ -26,14 +26,14 @@ class CalcHistory { //class for storing the history of questions & answers
     holder.setScrollY(holder.h-holder.surfaceH); holder.setDragMode(DragMode.NONE,DragMode.ANDROID); //scroll all the way to the bottom, and make it draggable in the vertical direction
     
     for(int n=0;n<entries;n++) { //loop through all entries
-      final Textbox question = buildTextbox( 2*(entries-n-1)   *tboxH,  true); //create each question textbox
-      final Textbox   answer = buildTextbox((2*(entries-n-1)+1)*tboxH, false); //create each   answer textbox
+      final Textbox question = buildTextbox( 2*(entries-n-1)   *tboxH,  true, getAnswerExact(n)); //create each question textbox
+      final Textbox   answer = buildTextbox((2*(entries-n-1)+1)*tboxH, false, getAnswerExact(n)); //create each   answer textbox
       
       question.hMode = answer.hMode = Textbox.HighlightMode.NONE; //prevent the question & answer textboxes from having highlight functionality
       
       setQuestion(n,question); //set the question
       setAnswer(n,answer);     //the answer
-      answerExact[n] = new MathObj(); //and the exact answer (this one doesn't care about order)
+      answerExact[n][0] = new MathObj(); //and the exact answer (this one doesn't care about order)
     }
   }
   
@@ -46,12 +46,12 @@ class CalcHistory { //class for storing the history of questions & answers
   Textbox getAnswer(int ind) { //grabs specific answer (index 0 means the newest one)
     return answers[Math.floorMod(ind+carousel, entries)]; //do the same thing
   }
-  MathObj getAnswerExact(int ind) { //grabs specific explicitly stored answer
+  MathObj[] getAnswerExact(int ind) { //grabs specific explicitly stored answer
     return answerExact[Math.floorMod(ind+carousel, entries)]; //do the same thing
   }
   
   MathObj getNewestAnswer() { //returns the newest (most recent) answer
-    return answerExact[carousel]; //go to the carousel index, return the answer there
+    return answerExact[carousel][0]; //go to the carousel index, return the answer there
   }
   
   private void setQuestion(int ind, Textbox box) { //sets the question box
@@ -63,7 +63,7 @@ class CalcHistory { //class for storing the history of questions & answers
   }
   
   void setAnswerExact(int ind, MathObj ans) { //sets explicitly stored answer at specific index
-    answerExact[Math.floorMod(ind+carousel, entries)] = ans; //go to adjusted index, set element
+    answerExact[Math.floorMod(ind+carousel, entries)][0]= ans; //go to adjusted index, set element
   }
   
   void setVisible(boolean vis) { holder.setActive(vis); } //set whether the history is visible
@@ -121,7 +121,7 @@ class CalcHistory { //class for storing the history of questions & answers
     for(int n=0;n<entries;n++) {
       questions[n].clear(false,false,false); //clear every question
       answers  [n].clear(false,false,false); //clear every answer
-      answerExact[n] = new MathObj();        //clear every explicit answer
+      answerExact[n][0] = new MathObj();     //clear every explicit answer
     }
     
     if(save) { saveToDisk(); } //save the fact that history was cleared
@@ -134,7 +134,7 @@ class CalcHistory { //class for storing the history of questions & answers
     
     Textbox[] questions2 = new Textbox[size], //create new question array of the correct size
                 answers2 = new Textbox[size]; //and new answer array
-    MathObj[] answerExact2 = new MathObj[size]; //and new exact answer array
+    MathObj[][] answerExact2 = new MathObj[size][1]; //and new exact answer array
     
     for(int n=0;n<size && n<entries;n++) { //loop through all entries that can be copied and exist
       questions2[n] = getQuestion(n); //shallow copy over each question
@@ -145,9 +145,9 @@ class CalcHistory { //class for storing the history of questions & answers
       answers2  [n].y = (2*size-2*n-1)*boxHeight; //change the y position of each answer
     }
     for(int n=entries; n<size; n++) { //loop through all the entries that weren't created (assuming size>entries, otherwise the loop isn't even entered)
-      questions2[n] = buildTextbox( 2*(size-n-1)   *boxHeight,  true); //set this question
-      answers2  [n] = buildTextbox((2*(size-n-1)+1)*boxHeight, false); //set this answer
-      answerExact2[n] = new MathObj();                                 //set this exact answer
+      questions2[n] = buildTextbox( 2*(size-n-1)   *boxHeight,  true, answerExact2[n]); //set this question
+      answers2  [n] = buildTextbox((2*(size-n-1)+1)*boxHeight, false, answerExact2[n]); //set this answer
+      answerExact2[n][0] = new MathObj();                              //set this exact answer
     }
     SharedPreferences.Editor editor = null; //an editor to remove all unneeded data
     for(int n=size; n<entries; n++) { //loop through all the entries that we have to delete (assuming entries>size, otherwise the loop isn't even entered)
@@ -176,9 +176,9 @@ class CalcHistory { //class for storing the history of questions & answers
   void saveToDisk() { //saves the entire history to the disk
     SharedPreferences.Editor editor = sharedPref.edit();
     for(int n=0;n<entries;n++) {
-      saveQuestionToDisk   (n,  questions[n], editor);
-      saveAnswerToDisk     (n,    answers[n], editor);
-      saveAnswerExactToDisk(n,answerExact[n], editor);
+      saveQuestionToDisk   (n,  questions[n]   , editor);
+      saveAnswerToDisk     (n,    answers[n]   , editor);
+      saveAnswerExactToDisk(n,answerExact[n][0], editor);
     }
     saveBaseSettingsToDisk(this, editor);
     editor.apply();
@@ -188,22 +188,22 @@ class CalcHistory { //class for storing the history of questions & answers
     for(int n=0;n<entries;n++) {
       loadQuestionFromDisk(n, questions[n]);
       loadAnswerFromDisk  (n,   answers[n]);
-      answerExact[n] = loadAnswerExactFromDisk(n);
+      answerExact[n][0] = loadAnswerExactFromDisk(n);
     }
   }
   
   void saveUpdateToDisk() { //given that the history was just updated by 1 entry, it saves the update to disk by replacing the oldest entry w/ the newest one & incrementing the carousel index
     SharedPreferences.Editor editor = sharedPref.edit();
-    saveQuestionToDisk   (carousel,   questions[carousel], editor);
-    saveAnswerToDisk     (carousel,     answers[carousel], editor);
-    saveAnswerExactToDisk(carousel, answerExact[carousel], editor);
+    saveQuestionToDisk   (carousel,   questions[carousel]   , editor);
+    saveAnswerToDisk     (carousel,     answers[carousel]   , editor);
+    saveAnswerExactToDisk(carousel, answerExact[carousel][0], editor);
     saveBaseSettingsToDisk(this, editor);
     editor.apply();
   }
   
   //////////////////////////// UTILITY FUNCTIONS ///////////////////////
   
-  Textbox buildTextbox(float y, boolean question) { //builds & returns the question/answer textbox that would go at this height
+  Textbox buildTextbox(float y, boolean question, MathObj[] pointer) { //builds & returns the question/answer textbox that would go at this height
     final Textbox textbox = new Textbox(0,y,holder.w,boxHeight); //create each question textbox
     textbox.setTextColor(#00FFFF).setTextSizeAndAdjust(textSize).setSurfaceFill(#000000).setStroke(#00FFFF); //set the drawing parameters,
     textbox.setScrollable(true,false).setDragMode(DragMode.ANDROID,DragMode.NONE); //the scrolling mode
@@ -225,7 +225,14 @@ class CalcHistory { //class for storing the history of questions & answers
         String text = textbox.getText(); //grab the text from the textbox
         if(!text.equals("")) { //if it's not empty:
           io.typer.eraseSelection(true); //erase selection (if applicable)
+          int left = io.typer.size();    //grab position of left (
           io.typer.insert("("+text+")"); //insert text (making sure to wrap it in quotes)
+          int right = io.typer.size()-1; //grab position of right )
+          
+          Object anchor = new Object(); //we're going to use this arbitrary object as an anchor point
+          io.typer.assignCharObject( left, new Object[] {anchor, text      }); //attach objects to these parentheses
+          io.typer.assignCharObject(right, new Object[] {anchor, pointer[0]}); //if they are properly joined, we can replace the contents with an exact value
+          //we have to store the anchor object (to link the two parentheses), the text that must still be between the parentheses, and the math object they need to reference
         }
       } } });
     }

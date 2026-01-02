@@ -9,10 +9,11 @@ public static class MathObj { //represents any mathematical object we can plug i
   public VarType type = VarType.NONE; //type of variable
   public Equation equation = null; //an equation
   public String variable=null;
+  public Polynomial poly = null; //a polynomial
   
   public boolean fp = false; //whether it's displayed at full precision (usually false)
   
-  public enum VarType {BOOLEAN,COMPLEX,VECTOR,MATRIX,DATE,ARRAY,EQUATION,VARIABLE,MESSAGE,NONE; String toString() { return name().toLowerCase(); } }
+  public enum VarType {BOOLEAN,COMPLEX,VECTOR,MATRIX,DATE,ARRAY,EQUATION,VARIABLE,POLY,MESSAGE,NONE; String toString() { return name().toLowerCase(); } }
   
   public MathObj()             { type=VarType.NONE; }
   public MathObj(Complex c)    { number=c; type=VarType.COMPLEX; }
@@ -28,6 +29,7 @@ public static class MathObj { //represents any mathematical object we can plug i
     if(t) { variable = s; type = VarType.VARIABLE; }
     else  { message = s; type = VarType.MESSAGE; }
   }
+  public MathObj(Polynomial p) { poly = p; type=VarType.POLY; }
   
   public MathObj(Entry e) {
     if(e.getType()==EntryType.NUM) { number = Cpx.complex(e.getId()); type=VarType.COMPLEX; }
@@ -53,6 +55,8 @@ public static class MathObj { //represents any mathematical object we can plug i
         case "Thursday" : date = Date. thursday(); type=VarType.DATE; break;
         case "Friday"   : date = Date.   friday(); type=VarType.DATE; break;
         case "Saturday" : date = Date. saturday(); type=VarType.DATE; break;
+        
+        case "NULL": type=VarType.NONE; return; //this is probably not actually executed in practice
       }
       
       if(type==VarType.NONE) { //if we still haven't found it, it might be a date
@@ -110,6 +114,7 @@ public static class MathObj { //represents any mathematical object we can plug i
   boolean isMessage() { return type==VarType.MESSAGE; }
   boolean isEquation() { return type==VarType.EQUATION; }
   boolean isVariable() { return type==VarType.VARIABLE; }
+  boolean isPolynomial() { return type==VarType.POLY; }
   boolean isNone() { return type==VarType.NONE; }
   
   boolean isNormal() { return type!=VarType.NONE && type!=VarType.MESSAGE; }
@@ -138,7 +143,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case ARRAY: {
         StringBuilder sb = new StringBuilder("{");
         for(int n=0;n<array.length;n++) {
-          if(n!=0) { sb.append(","); }
+          if(n!=0) { sb.append(", "); }
           array[n].fp = fp;
           sb.append(array[n]);
         }
@@ -146,6 +151,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       } break;
       case MESSAGE: res = message;               break;
       case VARIABLE: res = "$VAR{"+variable+"}"; break;
+      case POLY: res = poly.toString(dig);       break;
       default: res = "NULL";
     }
     Complex.omit_Option=true;
@@ -168,6 +174,7 @@ public static class MathObj { //represents any mathematical object we can plug i
         return new MathObj(copyArr); //return resulting array
       }
       case VARIABLE: return new MathObj(true, variable+"");
+      case POLY: return new MathObj(poly.clone());
       case MESSAGE: return new MathObj(false, message+"");
       case EQUATION: return new MathObj(equation); //TODO FOR NOW, WE ARE NOT CLONING THE EQUATION. THIS MIGHT CHANGE LATER
       case NONE: return new MathObj();
@@ -187,6 +194,7 @@ public static class MathObj { //represents any mathematical object we can plug i
         case MATRIX: return matrix.equals(m.matrix);
         case DATE: return date.equals(m.date);
         case MESSAGE: return message.equals(m.message);
+        case POLY: return poly.equals(m.poly);
         case ARRAY: {
           if(array.length!=m.array.length) { return false; }
           for(int n=0;n<array.length;n++) {
@@ -210,6 +218,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case MATRIX: return matrix.hashCode();
       case DATE: return date.hashCode();
       case MESSAGE: return message.hashCode();
+      case POLY: return poly.hashCode();
       case ARRAY: {
         int hash = 3;
         for(MathObj m : array) {
@@ -224,26 +233,38 @@ public static class MathObj { //represents any mathematical object we can plug i
   }
   
   public String saveAsString() {
-    String result = type.name()+" ";
-    while(result.length()<9) { result+=" "; }
+    StringBuilder result = new StringBuilder().append(type.name()).append(" ");
+    while(result.length()<9) { result.append(" "); }
     switch(type) {
-      case COMPLEX: result+=hex(number); break;
-      case BOOLEAN: result+=bool?"1":"0"; break;
-      case VECTOR: result+=hex(vector.size())+" "; for(int n=0;n<vector.size();n++) { result+=hex(vector.get(n))+" ";  } break;
-      case MATRIX: result+=hex(matrix.h)+" "+hex(matrix.w)+" "; for(int i=1;i<=matrix.h;i++) for(int j=1;j<=matrix.w;j++) { result+=hex(matrix.get(i,j))+" "; } break;
-      case DATE: result+=hex(date.day); break;
-      case MESSAGE: result+=message; break;
+      case COMPLEX: result.append(hex(number)); break;
+      case BOOLEAN: result.append(bool?"1":"0"); break;
+      case VECTOR: result.append(hex(vector.size())).append(" "); for(int n=0;n<vector.size();n++) { result.append(hex(vector.get(n))).append(" ");  } break;
+      case MATRIX: result.append(hex(matrix.h)).append(" ").append(hex(matrix.w)).append(" "); for(int i=1;i<=matrix.h;i++) for(int j=1;j<=matrix.w;j++) { result.append(hex(matrix.get(i,j))).append(" "); } break;
+      case DATE: result.append(hex(date.day)); break;
+      case MESSAGE: result.append(message); break;
       case ARRAY: {
-        result += hex(array.length)+" "; //show the array length
+        result.append(hex(array.length)).append(" "); //show the array length
         for(int n=0;n<array.length;n++) { //loop through the array
-          if(n!=0) { result+=","; } //separate each entry w/ commas
-          result += "("+array[n].saveAsString()+")"; //wrap each entry in parentheses
+          if(n!=0) { result.append(","); } //separate each entry w/ commas
+          result.append("(").append(array[n].saveAsString()).append(")"); //wrap each entry in parentheses
         }
+      } break;
+      case POLY: {
+        result.append(hex(poly.size())).append(" "); //record the number of elements
+        for(Term term : poly) { //loop through the terms
+          Complex coef = poly.getCoef(term);
+          result.append("(").append(hex(term.size()+1)).append(" (").append(hex(coef.re)).append(",").append(hex(coef.im)).append(")"); //list the coefficient
+          for(Token tok : term) { //loop through the tokens
+            result.append(",(").append(tok.variable).append(",").append(tok.power).append(")"); //show the variable and power
+          }
+          result.append("),");
+        }
+        if(!poly.isEmpty()) { result.setLength(result.length()-1); } //unless there are no terms, remove the last comma (for some reason???)
       } break;
       case EQUATION: throw new RuntimeException("I'm not ready to save an equation to a file!!!");
       case NONE: break;
     }
-    return result; //return result
+    return result.toString(); //return result
   }
   
   public static MathObj loadFromString(String s) {
@@ -271,7 +292,7 @@ public static class MathObj { //represents any mathematical object we can plug i
         return new MathObj(new Date(d));
       }
       case "ARRAY   ": {
-        int parCount = 0; //while iteratively evaluating the string, we must keep track of the number of parentheses
+        int parCount =  0; //while iteratively evaluating the string, we must keep track of the number of parentheses
         int startInd = -1; //for each entry, we must know where that entry's string starts
         int size = unhex(s.substring(9,17)); //compute the size of the array
         MathObj[] elements = new MathObj[size]; //load the math object array
@@ -293,6 +314,44 @@ public static class MathObj { //represents any mathematical object we can plug i
         
         return new MathObj(elements); //return a math object created from that array
       }
+      case "POLY    ": {
+        int size = unhex(s.substring(9,17));        //compute the size of the array
+        Object[][][] loader = new Object[size][][]; //initialize the object array that'll be used to load this polynomial
+        int parCount = 0; int startInd = -1;        //these are used to keep track of where we are in terms of recursive parentheses, as well as where the current entry begins
+        int[] inds = {0,0,0};
+        
+        for(int i=18;i<s.length();i++) { //loop through the remaining characters
+          if(s.charAt(i)=='(') { //when we see a left parenthesis:
+            parCount++;          //increase the left parenthesis account
+            if(parCount==1) {    //if we just entered from the outermost layer:
+              int size2 = unhex(s.substring(i+1,i+9)); //find the length of this array
+              loader[inds[0]] = new Object[size2][2];  //initialize this array to have the correct length (the array inside will always be size 2, thankfully)
+            }
+            else { startInd = i+1; } //if we just entered from the next layer, we need to record the innermost element starting from the next index
+          }
+          else if(s.charAt(i)==',') { //when we see a comma:
+            if(parCount==2) {         //if we're in the innermost layer:
+              String extraction = s.substring(startInd,i); //grab the substring from the beginning of this entry up till this point
+              loader[inds[0]][inds[1]][inds[2]] = inds[1]==0 ? dUnhex(extraction) : inds[2]==1 ? unhex(extraction) : extraction; //put in here either a string, an integer, or a double
+              startInd = i+1; //we need to record the innermost element starting from the next index
+            }
+            
+            inds[parCount]++; //increment the current index
+            for(int j=parCount+1;j<3;j++) { inds[j] = 0; } //reset all indices for more inner parts
+          }
+          else if(s.charAt(i)==')') { //when we see a right parenthesis:
+            if(parCount==2) {         //if we're in the innermost layer:
+              String extraction = s.substring(startInd,i); //grab the substring from the beginning of this entry up till this point
+              loader[inds[0]][inds[1]][inds[2]] = inds[1]==0 ? dUnhex(extraction) : inds[2]==1 ? unhex(extraction) : extraction; //put in here either a string, an integer, or a double
+              startInd = i+1; //we need to record the innermost element starting from the next index
+            }
+            
+            parCount--;               //decrease the left parenthesis count
+          }
+        }
+        
+        return new MathObj(new Polynomial(loader)); //return a math object created from that array
+      }
       case "MESSAGE ": {
         return new MathObj(false, s.substring(9));
       }
@@ -312,6 +371,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.add(m.number));
       case VECTOR : return new MathObj(vector.add(m.vector));
       case MATRIX : return new MathObj(matrix.add(m.matrix));
+      case POLY   : return new MathObj(poly.add(m.poly));
       default: throw new RuntimeException("Cannot add "+type+" together");
     }
   }
@@ -322,6 +382,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.sub(m.number));
       case VECTOR : return new MathObj(vector.sub(m.vector));
       case MATRIX : return new MathObj(matrix.sub(m.matrix));
+      case POLY   : return new MathObj(poly.sub(m.poly));
       default: throw new RuntimeException("Cannot subtract "+type+" together");
     }
   }
@@ -332,6 +393,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.addeq(m.number); break;
       case VECTOR : vector.addeq(m.vector); break;
       case MATRIX : matrix.addeq(m.matrix); break;
+      case POLY   : poly.addeq(m.poly); break;
       default: throw new RuntimeException("Cannot add "+type+" together");
     }
     return this;
@@ -343,6 +405,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.subeq(m.number); break;
       case VECTOR : vector.subeq(m.vector); break;
       case MATRIX : matrix.subeq(m.matrix); break;
+      case POLY   : poly.subeq(m.poly); break;
       default: throw new RuntimeException("Cannot subtract "+type+" together");
     }
     return this;
@@ -353,6 +416,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.neg());
       case VECTOR : return new MathObj(vector.neg());
       case MATRIX : return new MathObj(matrix.neg());
+      case POLY   : return new MathObj(poly.neg());
       default: throw new RuntimeException("Cannot negate "+type);
     }
   }
@@ -362,6 +426,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.negeq(); break;
       case VECTOR : vector.negeq(); break;
       case MATRIX : matrix.negeq(); break;
+      case POLY   : poly.negeq(); break;
       default: throw new RuntimeException("Cannot negate "+type);
     }
     return this;
@@ -372,6 +437,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.mul(c));
       case VECTOR : return new MathObj(vector.mul(c));
       case MATRIX : return new MathObj(matrix.mul(c));
+      case POLY   : return new MathObj(  poly.mul(c));
       default: throw new RuntimeException("Cannot multiply "+type+" by scalar");
     }
   }
@@ -381,6 +447,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.mul(d));
       case VECTOR : return new MathObj(vector.mul(d));
       case MATRIX : return new MathObj(matrix.mul(d));
+      case POLY   : return new MathObj(  poly.mul(d));
       default: throw new RuntimeException("Cannot multiply "+type+" by scalar");
     }
   }
@@ -390,6 +457,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.div(c));
       case VECTOR : return new MathObj(vector.div(c));
       case MATRIX : return new MathObj(matrix.div(c));
+      case POLY   : return new MathObj(  poly.div(c));
       default: throw new RuntimeException("Cannot divide "+type+" by scalar");
     }
   }
@@ -399,6 +467,7 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: return new MathObj(number.div(d));
       case VECTOR : return new MathObj(vector.div(d));
       case MATRIX : return new MathObj(matrix.div(d));
+      case POLY   : return new MathObj(  poly.div(d));
       default: throw new RuntimeException("Cannot divide "+type+" by scalar");
     }
   }
@@ -408,7 +477,8 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.muleq(c); break;
       case VECTOR : vector.muleq(c); break;
       case MATRIX : matrix.muleq(c); break;
-      default: throw new RuntimeException("Cannot multiply "+type+" by scalar");
+      case POLY   :   poly.muleq(c); break;
+      default: throw new RuntimeException("Cannot multiply equal "+type+" by scalar");
     }
     return this;
   }
@@ -418,7 +488,8 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.muleq(d); break;
       case VECTOR : vector.muleq(d); break;
       case MATRIX : matrix.muleq(d); break;
-      default: throw new RuntimeException("Cannot multiply "+type+" by scalar");
+      case POLY   :   poly.muleq(d); break;
+      default: throw new RuntimeException("Cannot multiply equal "+type+" by scalar");
     }
     return this;
   }
@@ -428,7 +499,8 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.diveq(c); break;
       case VECTOR : vector.diveq(c); break;
       case MATRIX : matrix.diveq(c); break;
-      default: throw new RuntimeException("Cannot divide "+type+" by scalar");
+      case POLY   :   poly.diveq(c); break;
+      default: throw new RuntimeException("Cannot divide equal "+type+" by scalar");
     }
     return this;
   }
@@ -438,7 +510,8 @@ public static class MathObj { //represents any mathematical object we can plug i
       case COMPLEX: number.diveq(d); break;
       case VECTOR : vector.diveq(d); break;
       case MATRIX : matrix.diveq(d); break;
-      default: throw new RuntimeException("Cannot divide "+type+" by scalar");
+      case POLY   :   poly.diveq(d); break;
+      default: throw new RuntimeException("Cannot divide equal "+type+" by scalar");
     }
     return this;
   }

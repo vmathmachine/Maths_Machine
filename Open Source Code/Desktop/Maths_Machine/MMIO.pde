@@ -11,6 +11,8 @@ public static class Mmio extends Panel { //the top level parent of all the IO ob
   int buffWid=0, buffHig=0;                   //the width & height of the 2 dimensional array (yes, it must be a rectangular array, not a jagged array)
   long buffTime = System.currentTimeMillis(); //stores the time of the last attempt at buffer garbage collection
   
+  ClipManager clipMan = new ClipManager(); //this helps manage clipping for the sake of displaying things inside of windows
+  
   CursorList<UICursor> cursors = new CursorList<UICursor>(); //all the cursors/touches/mice/pointers on screen
   
   //// specific options and key parameters

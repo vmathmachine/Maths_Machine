@@ -2,10 +2,59 @@ public static class ParseList implements Iterable<String> { //a class specifical
   public ArrayList<String> list = new ArrayList<String>(); //storage of all the strings that'll be parsed into an expression
   
   public ParseList(String inp) { //splits up all the chars and creates a new ParseList
-    char[] arr = inp.toCharArray();       //split string into char array
-    list.add("(");                        //add a left parenthesis at the beginning
-    for(char c : arr) { list.add(c+""); } //cast each char to a string and add to list
-    list.add(")");                        //add a right parenthesis at the end
+    char[] arr = inp.toCharArray();                        //split string into char array
+    list.add("(");                                         //add a left parenthesis at the beginning
+    for(char c : arr) { list.add(Character.toString(c)); } //cast each char to a string and add to list
+    list.add(")");                                         //add a right parenthesis at the end
+  }
+  
+  public ParseList(Textbox typer, ArrayList<MathObj> varList) { //this forms a parselist using both the text AND the objects linked to them
+    ArrayList<String> store = new ArrayList<String>(); //this is a list of stored characters for us to potentially add to the list
+    
+    Object anchor = null; //this is the anchor which links two parentheses
+    String text = null;   //this is the text that needs to be between the two parentheses
+    
+    store.add("("); //we need to wrap the contents in parentheses
+    for(SimpleText st : typer.texts) { //loop through all the characters in the typer's string
+      
+      if(st.misc!=null) { //if there's something attached:
+        if(st.text=='(') { //if this is a left parenthesis:
+          list.addAll(store);                    //push everything accumulated thus far onto the list
+          store.clear(); store.add("(");         //clear the store list and append the left par
+          anchor = ((Object[])st.misc)[0];       //set the anchor
+          text = (String)((Object[])st.misc)[1]; //and the text
+        }
+        else if(st.text==')') { //if this is a right parenthesis:
+          //we need to test and see if this matches
+          boolean match = (anchor==((Object[])st.misc)[0]); //the first test is to make sure they have the same anchor
+          if(match) { //now, we need to make sure the string inside matches
+            StringBuilder sb = new StringBuilder(); //construct the contents within the parentheses using a stringbuilder
+            for(int i=1;i<store.size();i++) {
+              sb.append(store.get(i));
+            }
+            match = sb.toString().equals(text); //match is now only true if the strings match up
+          }
+          
+          if(match) { //if we've determined that these match correctly:
+            list.add("__var___"+varList.size());          //we add a hidden variable that links to the answer list
+            varList.add((MathObj)((Object[])st.misc)[1]); //link the actual object this will represent
+            store.clear();                                //clear the store list
+          }
+          else { //otherwise:
+            list.addAll(store);            //push everything we have so far
+            store.clear(); store.add(")"); //clear the store list and append the right par
+          }
+          
+          anchor = text = null; //reset the anchor and the text
+        }
+      }
+      else { //otherwise, if there's nothing attached:
+        store.add(Character.toString(st.text)); //just add on the text stored
+      }
+    }
+    store.add(")"); //finish wrapping
+    
+    list.addAll(store); //add everything onto this list
   }
   
   @Override
@@ -22,12 +71,12 @@ public static class ParseList implements Iterable<String> { //a class specifical
   
   @Override
   public String toString() {
-    String ret = "";
-    for(String s : this) { ret+=s+", "; }
-    return ret;
+    StringBuilder sb = new StringBuilder();
+    for(String s : this) { sb.append(s).append(", "); }
+    return sb.toString();
   }
   
-  public void groupFuncs() { //group together functions
+  /*public void groupFuncs() { //group together functions
     ArrayList<Integer> parPos = leftParPosList(); //get a list of the positions of all left parentheses
     
     for(String match : functionDictionary.lookup) { //loop through all strings in the list of function names (big to small)
@@ -62,6 +111,21 @@ public static class ParseList implements Iterable<String> { //a class specifical
         }
       }
     }
+  }*/
+  
+  public static TrieNode trie = null;
+  
+  public void tokenize() {
+    if(trie==null) {
+      trie = new TrieNode();
+      trie.addTokens(functionDictionary.lookup);
+      trie.addTokens(Equation.varList);
+    }
+    
+    StringBuilder sb = new StringBuilder();
+    for(String s : list) { sb.append(s); }
+    
+    list = TrieNode.tokenize(trie,sb.toString(), true);
   }
   
   public void groupDates() { //group together dates
@@ -93,7 +157,7 @@ public static class ParseList implements Iterable<String> { //a class specifical
   }
   
   void groupStringOfSize(int pos, int siz) { //take a group of siz strings at position pos and group them together
-    for(int n=1;n<siz;n++) {         //loop through all strings in that set
+    for(int n=1;n<siz;n++) {       //loop through all strings in that set
       concat(pos,list.get(pos+1)); //concat them onto the first string on the set
       list.remove(pos+1);          //remove each element after they're concatted
     }
@@ -251,12 +315,94 @@ public static class ParseList implements Iterable<String> { //a class specifical
   }
   
   public void format() { //formats the parselist appropriately
-    groupFuncs();     //group together functions
-    groupVars();      //group together multi-character variables
+    tokenize();       //tokenize
+    //groupFuncs();     //group together functions
+    //groupVars();      //group together multi-character variables
     groupDates();     //group together all dates
     groupNums();      //group together numerals
     groupOps ();      //group together combinable operators
     removeSpaces();   //remove all unecessary whitespace
     groupPlusMinus(); //clump together plus and minuses
+  }
+}
+
+public static class TrieNode {
+  boolean isToken = false;
+  Map<Character, TrieNode> children = new HashMap<>();
+  
+  TrieNode() {  }
+  
+  boolean hasChild(char key) { return children.containsKey(key); }
+  
+  TrieNode getChild(char key) {
+    return hasChild(key) ? children.get(key) : null;
+  }
+  
+  private TrieNode addChild(char key) {
+    TrieNode node = new TrieNode();
+    children.put(key, node);
+    return node;
+  }
+  
+  TrieNode addIfAbsent(char key) {
+    return hasChild(key) ? children.get(key) : addChild(key);
+  }
+  
+  void addToken(String token) {
+    TrieNode node = this;
+    for(int i=0;i<token.length();i++) {
+      node = node.addIfAbsent(token.charAt(i));
+    }
+    node.isToken = true;
+  }
+  
+  void addTokens(Iterable<String> tokens) {
+    for(String token : tokens) { addToken(token); }
+  }
+  
+  void addTokens(String[] tokens) {
+    for(String token : tokens) { addToken(token); }
+  }
+  
+  void clear() { children.clear(); }
+  
+  void clearNiceGC() {
+    for(Map.Entry<Character,TrieNode> entry : children.entrySet()) {
+      entry.getValue().clearNiceGC();
+    }
+    children.clear();
+  }
+  
+  static ArrayList<String> tokenize(TrieNode root, String input, boolean includeAllSingleCharacters) {
+    ArrayList<String> tokens = new ArrayList<String>();
+    
+    TrieNode curr = root;
+    int ind = 0;
+    
+    while(ind<input.length()) { //loop through all tokens that'll be added to the list
+      int tokenStartInd = ind;
+      int tokenEndInd   = -1;
+      
+      while(ind<input.length() && curr!=null) { //loop through the tree to find the longest token we can grab
+        curr = curr.getChild(input.charAt(ind++)); //traverse down the tree
+        
+        if(curr!=null && curr.isToken) {
+          tokenEndInd = ind; //if this is a valid token, set it to be so
+        }
+      }
+      
+      if(tokenEndInd==-1) {
+        if(includeAllSingleCharacters) {
+          tokenEndInd = tokenStartInd+1;
+        }
+        else { throw new RuntimeException("String "+input+" failed to tokenize"); }
+      }
+      
+      tokens.add(input.substring(tokenStartInd,tokenEndInd));
+      ind = tokenEndInd;
+      curr = root;
+    }
+    
+    return tokens;
   }
 }

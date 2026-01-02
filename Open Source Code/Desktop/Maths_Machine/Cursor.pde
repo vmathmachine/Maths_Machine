@@ -51,8 +51,8 @@ public static class Cursor {
   
   void press  () { press  (LEFT); } //Press/release w/out specifying button.
   void release() { release(LEFT); } //LEFT is default button
-  void move() { }
-  void drag() { }
+  void move(float mouseX, float mouseY) { updatePos(mouseX,mouseY); } //these are meant to be run in response to move/drag events
+  void drag(float mouseX, float mouseY) { updatePos(mouseX,mouseY); }
   
   ////////////// DEFAULT FUNCTIONS //////////////////
   
@@ -106,7 +106,7 @@ public static class UICursor extends Cursor { //the Cursor, adapted to also be i
     }
     super.press(mouseButton); //press the correct button
     
-    mmio.updateButtons(this, (byte)1, false); //update the buttons, with code 1 for pressing
+    mmio.respondToChange(this, (byte)1, false); //update the UI elements, with code 1 for pressing
     
     if(mmio.typer!=null && mmio.typer.selectMenu!=null && select!=mmio.typer.selectMenu && (select==null || select.parent!=mmio.typer.selectMenu)) {
       mmio.typer.removeSelectMenu(); //if there's a typer with a select menu, the cursor isn't selecting it, and the cursor isn't selecting a button on it, remove the select menu
@@ -116,7 +116,7 @@ public static class UICursor extends Cursor { //the Cursor, adapted to also be i
   @Override public void release(int mouseButton) { //override the release functionality
     super.release(mouseButton); //release the correct button
     
-    mmio.updateButtons(this, (byte)0, false); //update the buttons, with code 0 for releasing
+    mmio.respondToChange(this, (byte)0, false); //update the UI elements, with code 0 for releasing
     //TODO make this compatible with multiple mouse buttons being pressed & released
     
     if(press==0) {     //if not pressing anymore
@@ -128,13 +128,17 @@ public static class UICursor extends Cursor { //the Cursor, adapted to also be i
     }
   }
   
-  @Override public void move() {
-    mmio.updateButtons(this, (byte)2, false); //update the buttons, with code 2 for moving
+  @Override public void move(float mouseX, float mouseY) {
+    super.move(mouseX, mouseY);
+    
+    mmio.respondToChange(this, (byte)2, false); //update the UI elements, with code 2 for moving
   }
   
-  @Override public void drag() {
-    Mmio.attemptSelectPromotion(this);        //attempt select promotion
-    mmio.updateButtons(this, (byte)3, false); //update the buttons, with code 3 for dragging
+  @Override public void drag(float mouseX, float mouseY) {
+    super.drag(mouseX, mouseY);
+    
+    Mmio.attemptSelectPromotion(this);          //attempt select promotion
+    mmio.respondToChange(this, (byte)3, false); //update the UI elements, with code 3 for dragging
   }
 }
 

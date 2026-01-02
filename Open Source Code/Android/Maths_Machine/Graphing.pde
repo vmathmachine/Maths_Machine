@@ -130,49 +130,55 @@ public class Graph { //an object which can graph things out
          yEnd   = (long)Math.ceil ((origY-yt    )/(pixPerUnit*tickSize)); //same in the y direction
     
     //Step 3: Draw the splitter lines between each tick
-    pgraph.stroke(24); pgraph.strokeWeight(2); //set the drawing parameters
-    for(long x=xStart;x<xEnd;x++) {     //loop through all ticks in the x direction
-      for(int n=0;n<splitPerTick;n++) { //draw the 4-5 splitters
-        pgraph.line((float)(origX+(x*tickSize+n*splitSize)*pixPerUnit),yt,(float)(origX+(x*tickSize+n*splitSize)*pixPerUnit),yt+hig); //draw the vertical splitter lines
+    if(equatList.getAxisMode()==2) {
+      pgraph.stroke(24); pgraph.strokeWeight(2); //set the drawing parameters
+      for(long x=xStart;x<xEnd;x++) {     //loop through all ticks in the x direction
+        for(int n=0;n<splitPerTick;n++) { //draw the 4-5 splitters
+          pgraph.line((float)(origX+(x*tickSize+n*splitSize)*pixPerUnit),yt,(float)(origX+(x*tickSize+n*splitSize)*pixPerUnit),yt+hig); //draw the vertical splitter lines
+        }
       }
-    }
-    for(long y=yStart;y<yEnd;y++) {     //now, just do the same thing in the y direction
-      for(int n=0;n<splitPerTick;n++) { //draw the 4-5 splitters
-        pgraph.line(xt,(float)(origY-(y*tickSize+n*splitSize)*pixPerUnit),xt+wid,(float)(origY-(y*tickSize+n*splitSize)*pixPerUnit)); //draw the horizontal splitter lines
+      for(long y=yStart;y<yEnd;y++) {     //now, just do the same thing in the y direction
+        for(int n=0;n<splitPerTick;n++) { //draw the 4-5 splitters
+          pgraph.line(xt,(float)(origY-(y*tickSize+n*splitSize)*pixPerUnit),xt+wid,(float)(origY-(y*tickSize+n*splitSize)*pixPerUnit)); //draw the horizontal splitter lines
+        }
       }
     }
     
     //Step 4: Draw the axes
-    pgraph.stroke(255); pgraph.strokeWeight(2); //set the drawing parameters
-    pgraph.line(xt,(float)origY,xt+wid,(float)origY); //draw the x-axis
-    pgraph.line((float)origX,yt,(float)origX,yt+hig); //draw the y axis
-    
-    //Step 5: Draw the ticks along each axis
-    float xCut=constrain((float)origX,xt,xt+wid), yCut=constrain((float)origY,yt,yt+hig); //the tick marks should be displayed, regardless of if the axes are on screen. Here are their positions on screen
-    for(long x=xStart;x<xEnd;x++) { //loop through all ticks in the x direction
-      if(x!=0) { pgraph.line((float)(origX+x*tickSize*pixPerUnit),yCut-0.5*tickLen,(float)(origX+x*tickSize*pixPerUnit),yCut+0.5*tickLen); } //draw each tick at appropriate lengths
-    }
-    for(long y=yStart;y<yEnd;y++) { //loop through all ticks in the y direction
-      if(y!=0) { pgraph.line(xCut-0.5*tickLen,(float)(origY-y*tickSize*pixPerUnit),xCut+0.5*tickLen,(float)(origY-y*tickSize*pixPerUnit)); } //draw each tick at appropriate lengths
-    }
-    
-    //Step 5: Label each tick mark
-    boolean topOrBottom = origY>yt+hig-tickLen, leftOrRight = origX>xt+tickLen; //decide on which side of each axis the labels are gonna go
-    
-    pgraph.textAlign(CENTER,topOrBottom ? BOTTOM : TOP);
-    for(long x=xStart;x<xEnd;x++) { //loop through all ticks in the x direction
-      if(x==0) { continue; }
-      String label = new Complex(x*tickSize).toString(12);
-      float sizer = io.getTextWidth(label,20); pgraph.textSize(min(0.044444444*width,(float)(20*0.9*tickSize*pixPerUnit/sizer))); //set the textSize so that text does not overlap
-      pgraph.text(label,(float)(origX+x*tickSize*pixPerUnit),yCut-(topOrBottom?0.625:-0.625)*tickLen);
-    }
-    
-    pgraph.textSize(0.044444444*width);
-    pgraph.textAlign(leftOrRight ? RIGHT : LEFT, CENTER);
-    for(long y=yStart;y<yEnd;y++) { //loop through all ticks in the x direction
-      if(y==0) { continue; }
-      String label = new Complex(y*tickSize).toString(12);
-      pgraph.text(label,xCut-(leftOrRight?0.625:-0.625)*tickLen,(float)(origY-y*tickSize*pixPerUnit));
+    if(equatList.getAxisMode()!=0) {
+      pgraph.stroke(255); pgraph.strokeWeight(2); //set the drawing parameters
+      pgraph.line(xt,(float)origY,xt+wid,(float)origY); //draw the x-axis
+      pgraph.line((float)origX,yt,(float)origX,yt+hig); //draw the y axis
+      
+      //Step 5: Draw the ticks along each axis
+      if(equatList.getAxisMode()==2) {
+        float xCut=constrain((float)origX,xt,xt+wid), yCut=constrain((float)origY,yt,yt+hig); //the tick marks should be displayed, regardless of if the axes are on screen. Here are their positions on screen
+        for(long x=xStart;x<xEnd;x++) { //loop through all ticks in the x direction
+          if(x!=0) { pgraph.line((float)(origX+x*tickSize*pixPerUnit),yCut-0.5*tickLen,(float)(origX+x*tickSize*pixPerUnit),yCut+0.5*tickLen); } //draw each tick at appropriate lengths
+        }
+        for(long y=yStart;y<yEnd;y++) { //loop through all ticks in the y direction
+          if(y!=0) { pgraph.line(xCut-0.5*tickLen,(float)(origY-y*tickSize*pixPerUnit),xCut+0.5*tickLen,(float)(origY-y*tickSize*pixPerUnit)); } //draw each tick at appropriate lengths
+        }
+        
+        //Step 6: Label each tick mark
+        boolean topOrBottom = origY>yt+hig-tickLen, leftOrRight = origX>xt+tickLen; //decide on which side of each axis the labels are gonna go
+        
+        pgraph.textAlign(CENTER,topOrBottom ? BOTTOM : TOP);
+        for(long x=xStart;x<xEnd;x++) { //loop through all ticks in the x direction
+          if(x==0) { continue; }
+          String label = new Complex(x*tickSize).toString(12);
+          float sizer = io.getTextWidth(label,20); pgraph.textSize(min(0.044444444*width,(float)(20*0.9*tickSize*pixPerUnit/sizer))); //set the textSize so that text does not overlap
+          pgraph.text(label,(float)(origX+x*tickSize*pixPerUnit),yCut-(topOrBottom?0.625:-0.625)*tickLen);
+        }
+        
+        pgraph.textSize(0.044444444*width);
+        pgraph.textAlign(leftOrRight ? RIGHT : LEFT, CENTER);
+        for(long y=yStart;y<yEnd;y++) { //loop through all ticks in the x direction
+          if(y==0) { continue; }
+          String label = new Complex(y*tickSize).toString(12);
+          pgraph.text(label,xCut-(leftOrRight?0.625:-0.625)*tickLen,(float)(origY-y*tickSize*pixPerUnit));
+        }
+      }
     }
   }
   
@@ -208,7 +214,7 @@ public class Graph { //an object which can graph things out
       
       double inp = (f.mode==GraphMode.RECT2D) ? (xt+n-origX)*stepSize : n*stepSize+f.start; //compute current input
       
-      feed.put(f.mode.inputs()[0],new MathObj(new Complex(inp))); //tell the solver to plug in this value for x/θ/t
+      feed.put(f.mode.inputs()[0],new MathObj(inp)); //tell the solver to plug in this value for x/θ/t
       
       MathObj out;
       try {
@@ -220,7 +226,7 @@ public class Graph { //an object which can graph things out
         else { works = false; } //otherwise, it isn't plottable
         //TODO give slight leeway for numbers with very small imaginary part, adjust algorithm so odd vertical asymptotes don't get connected
       }
-      catch(CalculationException ex) {
+      catch(CalculationException | RuntimeException ex) {
         works = false;
         out = new MathObj();
       }
@@ -407,7 +413,7 @@ public class Graph3D extends Graph {
     
     
     //Step 3: Draw the axes
-    if(equatList.axisMode!=0) { //first, make sure we're allowed to display axes (note: tickmarks/labels won't be shown if axes aren't shown)
+    if(equatList.getAxisMode()!=0) { //first, make sure we're allowed to display axes (note: tickmarks/labels won't be shown if axes aren't shown)
       pgraph.stroke(255);
       float xCut = constrain((float)origX,-1,1), yCut = constrain((float)origY,-1,1), zCut = constrain((float)origZ,-1,1);
       pgraph.line(-50,-50*zCut,-50*yCut,50,-50*zCut,-50*yCut);
@@ -416,7 +422,7 @@ public class Graph3D extends Graph {
       //pgraph.stroke(255); pgraph.noFill(); pgraph.box(100);
       
       //Step 4: Draw the ticks along each axis
-      if(equatList.axisMode!=1) { //make sure we're allowed to show ticks & labels
+      if(equatList.getAxisMode()!=1) { //make sure we're allowed to show ticks & labels
         for(long x=xStart;x<xEnd;x++) { //loop through all ticks in the x direction
           if(x!=0) {
             pgraph.line(50*(float)(origX+x*tickSize*pixPerUnit),-50*zCut,-50*yCut-0.5*tickLen,50*(float)(origX+x*tickSize*pixPerUnit),-50*zCut,-50*yCut+0.5*tickLen); //draw each tick at appropriate lengths
@@ -437,7 +443,7 @@ public class Graph3D extends Graph {
   }
   
   void drawLabels(PGraphics pgraph, float xShift, float yShift) {
-    if(equatList.axisMode==2) {
+    if(equatList.getAxisMode()==2) {
       //Since this is on a base 10 logarithmic scale, a logical first step would be to take the base 10 logarithm of our hypothetical tick size
       double log = Math.log(1/(8*pixPerUnit))/Math.log(10); //according to our rule, the tick size should be >= 10^log
       double ceil = Math.ceil(log), frac = ceil-log; //record the ceiling of the log, as well as the fractional difference. Our tick size should either be 10^ceil, 1/2*10^ceil, or 1/5*10^ceil.
@@ -591,16 +597,16 @@ public class Graph3D extends Graph {
     double[][][] points = new double[steps1+1][steps2+1][3]; //create a 2D array of 3D vectors
     for(int m=0;m<=steps1;m++) { //loop through values for the 1st input variable
       double inp1 = start1+scale1*m; //compute 1st input
-      feed.put(f.mode.inputs()[0],new MathObj(new Complex(inp1))); //tell the solver to plug in this value for x/θ/t
+      feed.put(f.mode.inputs()[0],new MathObj(inp1)); //tell the solver to plug in this value for x/θ/t
       for(int n=0;n<=steps2;n++) { //loop through the values for the 2nd input variable
         double inp2 = start2+scale2*n; //compute 2nd input
-        feed.put(f.mode.inputs()[1],new MathObj(new Complex(inp2))); //tell the solver to plug in this value for y/r/φ/u
+        feed.put(f.mode.inputs()[1],new MathObj(inp2)); //tell the solver to plug in this value for y/r/φ/u
         
         MathObj out;
         try {
           out = f.function.solve(feed); //compute the output
         }
-        catch(CalculationException ex) {
+        catch(CalculationException | RuntimeException ex) {
           out = new MathObj();
         }
         //TODO see why on earth this try catch tree looks so much different than the one for plot 2D???

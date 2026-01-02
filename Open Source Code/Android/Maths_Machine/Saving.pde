@@ -42,7 +42,7 @@ static void putMathObj(SharedPreferences pref, SharedPreferences.Editor editor, 
   
   editor.putString(name+" type",obj.type.name()); //now, put away the type
   switch(obj.type) {                              //now, what we do next depends on the object type
-    case BOOLEAN: editor.putBoolean(name+" bool", obj.bool); break;      //boolean: store boolean
+    case BOOLEAN: editor.putBoolean(name+" bool", obj.bool);      break; //boolean: store boolean
     case COMPLEX: putComplex(editor,name+" complex", obj.number); break; //complex: store complex
     case VECTOR: { //vector:
       editor.putInt(name+" size",obj.vector.size()); //store the length
@@ -60,6 +60,22 @@ static void putMathObj(SharedPreferences pref, SharedPreferences.Editor editor, 
       editor.putInt(name+" size",obj.array.length); //store the length
       for(int n=0;n<obj.array.length;n++) { //loop through each component
         putMathObj(pref, editor, name+" array ["+n+"]", obj.array[n]); //save each component
+      }
+    } break;
+    case POLY: { //polynomial:
+      editor.putInt(name+" size",obj.poly.size()); //store how many terms there are
+      int i = 0;
+      for(Map.Entry<Term,Complex> entry : obj.poly.terms.entrySet()) { //now we loop through all terms
+        putComplex(editor, name+" coef ["+i+"]", entry.getValue()); //store the coefficient
+        Term key = entry.getKey();
+        editor.putInt(name+" size ["+i+"]", key.size()); //store how many tokens there are here
+        int j = 0;
+        for(Map.Entry<String,Integer> entry2 : key.tokens.entrySet()) { //loop through all tokens
+          editor.putString(name+" token ["+i+"] var ["+j+"]", entry2.getKey()); //record the variable name
+          editor.putInt(name+" token ["+i+"] exp ["+j+"]", entry2.getValue()); //record the exponent
+          j++; //increment index
+        }
+        i++; //increment index
       }
     } break;
     case EQUATION: throw new RuntimeException("AAAAAAH! I CAN'T SAVE EQUATIONS YET!"); //equation: AAAAAAAAAAHHH!!!
@@ -91,6 +107,20 @@ static void removeMathObj(SharedPreferences pref, SharedPreferences.Editor edito
       int len = pref.getInt(name+" size",0); //find the length
       editor.remove(name+" size");           //remove the length
       for(int i=0;i<len;i++) { removeMathObj(pref, editor, name+" array ["+i+"]"); } //remove each individual element
+    } break;
+    case "POLY": {
+      int numTerms = pref.getInt(name+" size",0); //find the length
+      editor.remove(name+" size");                //remove the length
+      
+      for(int i=0;i<numTerms;i++) { //now we loop through all terms
+        removeComplex(editor, name+" coef ["+i+"]"); //remove the coefficient
+        int numTokens = pref.getInt(name+" size ["+i+"]", 0); //find the amount of tokens
+        editor.remove(name+" size ["+i+"]"); //remove the amount of tokens
+        for(int j=0;j<numTokens;j++) { //loop through all tokens
+          editor.remove(name+" token ["+i+"] var ["+j+"]"); //remove the variable name
+          editor.remove(name+" token ["+i+"] exp ["+j+"]"); //remove the exponent
+        }
+      }
     } break;
     case "EQUATION": throw new RuntimeException("AAAAAAAAAAH! I CAN'T SAVE EQUATIONS YET!"); //equation: AAAAAAAAAAAAHHH!!!
     case "MESSAGE": editor.remove(name+" message"); break; //message: remove the message
@@ -125,6 +155,24 @@ static MathObj getMathObj(SharedPreferences pref, String name) { //obtains the m
       MathObj[] arr = new MathObj[len]; //generate array to store all elements
       for(int i=0;i<len;i++) { arr[i] = getMathObj(pref, name+" array ["+i+"]"); } //loop through array, load and set each element
       return new MathObj(arr); //return math object containing that array
+    }
+    case "POLY": {
+      int numTerms = pref.getInt(name+" size",0); //find the length
+      HashMap<Term,Complex> termList = new HashMap<Term,Complex>(numTerms); //initialize hashmap of terms
+      for(int i=0;i<numTerms;i++) { //now we loop through all terms
+        Complex coef = getComplex(pref, name+" coef ["+i+"]", new Complex()); //grab the coefficient
+        int numTokens = pref.getInt(name+" size ["+i+"]", 0); //find the number of tokens
+        HashMap<String,Integer> tokenList = new HashMap<String,Integer>(numTokens); //initialize hashmap of tokens 
+        for(int j=0;j<numTokens;j++) { //loop through all tokens
+          String varName = pref.getString(name+" token ["+i+"] var ["+j+"]", "UNKNOWN_VAR_"+j); //grab the name of the variable
+          int power = pref.getInt(name+" token ["+i+"] exp ["+j+"]", 0); //and the power
+          tokenList.put(varName, power); //assign them in the hashmap
+        }
+        Term term = new Term(); term.tokens = tokenList; //assign the tokens
+        termList.put(term, coef); //assign this term to have this token
+      }
+      Polynomial poly = new Polynomial(); poly.terms = termList; //assign the polynomial's terms
+      return new MathObj(poly); //return result
     }
     case "EQUATION": throw new RuntimeException("AAAAAAAAAAH! I CAN'T SAVE EQUATIONS YET!"); //equation: AAAAAAAAAAAAAAAHHH!!!
     case "MESSAGE": return new MathObj(false, pref.getString(name+" message","")); //message: return that message
@@ -322,7 +370,7 @@ void loadEquations(boolean dim) {
     
     String text = sharedPref.getString(prefix+n, "");
     
-    equatList.addEquation(dim,n, stroke,vis,mode,text);
+    equatList.addEquation(dim,n, stroke,vis,mode,text, false);
   }
 }
 

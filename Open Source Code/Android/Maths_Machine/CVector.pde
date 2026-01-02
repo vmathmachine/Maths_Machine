@@ -54,7 +54,7 @@ public static class CVector implements Iterable<Complex> {
     for(int n=0;n<size();n++) {            //loop through all elements in the array
       if(elements[n].lazyabs()<threshold) { result+="0"; } //if this element is below our threshold, round down to 0
       else { result += elements[n].toString(dig); } //concatenate each element, outputted to the given amount of precision
-      if(n!=size()-1) { result+=","; }     //put a comma after all entries but the last
+      if(n!=size()-1) { result+=", "; }     //put a comma after all entries but the last
     }
     return result+"]"; //close with right bracket, return result
   }

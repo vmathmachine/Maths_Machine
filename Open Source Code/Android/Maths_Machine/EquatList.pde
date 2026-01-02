@@ -1,6 +1,11 @@
+import java.util.Deque;
+
 public static class EquatList { //a class for holding the list of equations to be graphed out
   
   ////////////////// ATTRIBUTES ///////////////////
+  
+  static Deque<Object[]> recycleBin2D = new LinkedList<Object[]>(), recycleBin3D = new LinkedList<Object[]>(); //storage for recently deleted equations (array contains [0] index, [1] equation
+  static int binCapacity = 3;
   
   static class EquatField { //class for holding all the things necessary to find our equation
     Panel panel; //the display console
@@ -27,7 +32,7 @@ public static class EquatList { //a class for holding the list of equations to b
   Graph   grapher2D; //the grapher used to graph in 2D
   Graph3D grapher3D; //the grapher used to graph in 3D
   
-  byte axisMode = 2; //0=nothing, 1=axes, 2=axes+labels
+  byte axisMode2D = 2, axisMode3D = 2; //0=nothing, 1=axes, 2=axes+labels
   ConnectMode connect = ConnectMode.POINT; //how 3D graphs connect their points
   boolean graphDim = false; //graph dimensions (false=2d, true=3d)
   
@@ -51,11 +56,11 @@ public static class EquatList { //a class for holding the list of equations to b
     
     holder2D = new Panel(0,buttHig,w,h-2*buttHig).setDragMode(DragMode.NONE, pcOrMobile ? DragMode.NONE : DragMode.ANDROID).setScrollableY(true); //create the list of 2D equations
     holder2D.setSurfaceFill(0).setStroke(#00FFFF).setParent(bigHolder);
-    holder2D.setPixPerClickV(2*holder2D.pixPerClickV); //double the vertical scroll rate
+    holder2D.setPixPerClickV(2*holder2D.pixPerClickV); //increase the vertical scroll rate
     
     holder3D = new Panel(0,buttHig,w,h-2*buttHig).setDragMode(DragMode.NONE, pcOrMobile ? DragMode.NONE : DragMode.ANDROID).setScrollableY(true); //create the list of 3D equations
     holder3D.setSurfaceFill(0).setActive(false).setStroke(#00FFFF).setParent(bigHolder);
-    holder3D.setPixPerClickV(2*holder3D.pixPerClickV); //double the vertical scroll rate
+    holder3D.setPixPerClickV(2*holder3D.pixPerClickV); //increase the vertical scroll rate
     
     //next, we have to create all the buttons
     final float buttWid = 0.25*w; //the width of all buttons
@@ -70,6 +75,8 @@ public static class EquatList { //a class for holding the list of equations to b
     Button equationVisToggle = (Button)new Button(  buttWid,h-buttHig,buttWid,buttHig).setPalette(palette).setParent(bigHolder).setText("Visible?",#00FFFF); //toggles visibility
     Button equationMode      = (Button)new Button(2*buttWid,h-buttHig,buttWid,buttHig).setPalette(palette).setParent(bigHolder).setText("Mode"    ,#00FFFF); //sets graphing mode
     
+    Button equationRecover = (Button)new Button(3  *buttWid,0,buttWid,buttHig).setPalette(palette).setParent(bigHolder).setText("Recover",#00FFFF).setActive(false); //recovers most recently deleted equation
+    
     final float colorSelectSize = 0.035555556*w;
     colorSelect = (Textbox)new Textbox(3*buttWid,h-buttHig,buttWid,buttHig).setSurfaceFill(#001818).setStroke(#00FFFF).setParent(bigHolder); //textbox that allows you to change the selected equation's color
     colorSelect.setTextSizeAndAdjust(colorSelectSize); //change the text size
@@ -81,8 +88,8 @@ public static class EquatList { //a class for holding the list of equations to b
       addEquation(); //add equation at the specified index
     } });
     
-    mode2D.setOnRelease(new Action() { public void act() { changeGraphDims(); updateColorSelector(); } }); //make both buttons change graph dimensions (and reset the color selector)
-    mode3D.setOnRelease(new Action() { public void act() { changeGraphDims(); updateColorSelector(); } });
+    mode2D.setOnRelease(new Action() { public void act() { changeGraphDims(); updateEquationMenu(); } }); //make both buttons change graph dimensions (and reset the equation menu)
+    mode3D.setOnRelease(new Action() { public void act() { changeGraphDims(); updateEquationMenu(); } });
     
     equationUp.setOnRelease(new Action() { public void act() { if(equatCache!=null) {
       int ind = getEquatIndex(); //grab index
@@ -98,11 +105,19 @@ public static class EquatList { //a class for holding the list of equations to b
     
     equationDelete.setOnRelease(new Action() { public void act() { if(equatCache!=null) {
       deleteEquation(); //delete the current equation
+      updateDeleteButtons();
+      //equationDelete.setActive(false);
+      //equationRecover.setActive(true);
     } } });
+    
+    equationRecover.setOnRelease(new Action() { public void act() {
+      recoverEquation();
+      updateDeleteButtons();
+    } });
     
     equationCanceler.setOnRelease(new Action() { public void act() { if(equatCache!=null) {
       cancelEquation(equatCache); //cancel the currently selected equation
-      mmio.setTyper(null); equatCache=null; updateColorSelector(); //reset stuffs
+      mmio.setTyper(null); equatCache=null; updateEquationMenu(); //reset stuffs
     } } });
     
     equationVisToggle.setOnRelease(new Action() { public void act() { if(equatCache!=null) {
@@ -131,6 +146,17 @@ public static class EquatList { //a class for holding the list of equations to b
   
   Panel getHolder(boolean dim) { return      dim ? holder3D : holder2D; } //returns the equation holder for the equations we're looking at
   Panel getHolder()            { return graphDim ? holder3D : holder2D; } //returns the equation holder for the equations we're using right now
+  
+  byte getAxisMode(boolean dim) { return      dim ? axisMode3D : axisMode2D; }
+  byte getAxisMode()            { return graphDim ? axisMode3D : axisMode2D; }
+  void setAxisMode(boolean dim, int mode) {
+    if(dim) { axisMode3D = (byte)mode; }
+    else    { axisMode2D = (byte)mode; }
+  }
+  void setAxisMode(int mode) { setAxisMode(graphDim, mode); }
+  
+  Deque<Object[]> getBin(boolean dim) { return      dim ? recycleBin2D : recycleBin3D; }
+  Deque<Object[]> getBin()            { return graphDim ? recycleBin2D : recycleBin3D; }
   
   ArrayList<EquatField> getEquats(boolean dim) { return      dim ? equats3D : equats2D; } //returns the list of equations given the dimension you're looking for
   ArrayList<EquatField> getEquats()            { return graphDim ? equats3D : equats2D; }
@@ -173,6 +199,19 @@ public static class EquatList { //a class for holding the list of equations to b
       String config = ((stroke>>16)&255) + "," + ((stroke>>8)&255) + "," + (stroke&255); //generate the string that shows the red, green, blue
       colorSelect.replace(config); //set the contents of the text field to that
     }
+  }
+  
+  void updateDeleteButtons() { //updates the delete / recover buttons
+    boolean showRecover = equatCache==null && !getBin().isEmpty(); //whether we should show recover or delete
+    for(Box b : bigHolder) { //find the 2D and 3D buttons in the equation holder
+      if(b.text.length!=0 && b.text[0].getText().equals("Delete" )) { b.setActive(!showRecover); } //make the delete button appear/disappear
+      if(b.text.length!=0 && b.text[0].getText().equals("Recover")) { b.setActive( showRecover); } //make the recover button disappear/appear
+    }
+  }
+  
+  void updateEquationMenu() { //updates that should be performed any time there's a change in the layout
+    updateColorSelector();
+    updateDeleteButtons();
   }
   
   void updateSubscripts(boolean dim) { //updates all the subscripts in the equation list
@@ -226,7 +265,7 @@ public static class EquatList { //a class for holding the list of equations to b
     
     tbox.setOnRelease(new Action() { public void act() { //set what happens when we click on this textbox
       mmio.setTyper(tbox); equatCache=result; //when we click on an equation textbox, we select it
-      updateColorSelector();                  //update the color selection box
+      updateEquationMenu();                  //update the color selection box
       
       ctrlPanel.swapGraphMode(result.plot.mode); //swap our keypad buttons depending on the new mode of this button
     } });
@@ -293,13 +332,13 @@ public static class EquatList { //a class for holding the list of equations to b
     }
     
     mmio.setTyper(equatCache.typer); //go back to typing in the equation box
-    updateColorSelector();           //update the color selector
+    updateEquationMenu();            //update the equation menu
     if(save) { saveEquationsToDisk(graphDim); } //if we want to save, save
   }
   
   ////////////////// FUNCTIONALITY //////////////////////////////
   
-  EquatField addEquation(boolean dim, int index, color stroke, boolean vis, GraphMode mode, String text) {
+  EquatField addEquation(boolean dim, int index, color stroke, boolean vis, GraphMode mode, String text, boolean saveToDisk) {
     float buttY; //We have to figure out the y position of the new plottable equation
     if(index==0) { buttY = 0; } //if this is the first equation, it goes at the top (y=0)
     else { Box secret = get(dim,index-1).panel; buttY = secret.y+secret.h; } //otherwise, select the position right below our "secret box" (the box above this one)
@@ -315,24 +354,29 @@ public static class EquatList { //a class for holding the list of equations to b
     
     updateSubscripts(dim); //update the subscripts for each equation
     
-    saveEquationsToDisk(dim); //save our current equation list to disk
+    if(saveToDisk) { saveEquationsToDisk(dim); } //save our current equation list to disk
     
     return equat; //return result
   }
   
-  void addEquation() { //TODO make me more reusable!!!
+  void addEquation(int index) { //TODO make me more reusable!!!
     Panel holder = getHolder(); //grab the equation list we're referencing
     
-    int index = equatCache==null ? getHolder().numChildren() : getEquatIndex()+1; //first, we have to find the index we want to place this equation at
-    //if an equation is selected, we wanna put this right after that. Otherwise, we put this right at the very end
-    EquatField equat = addEquation(graphDim, index, #FF8000,true,graphDim?GraphMode.RECT3D:GraphMode.RECT2D,""); //add the equation
+    EquatField equat = addEquation(graphDim, index, #FF8000,true,graphDim?GraphMode.RECT3D:GraphMode.RECT2D,"", true); //add the equation
     
     mmio.setTyper(equat.typer); equatCache=equat; //select this equation for typing into
     equat.typer.resetBlinker();                   //make the caret visible
     holder.chooseTargetRecursive(0.5*holder.w,equat.panel.y+holder.ySpace,0.5*holder.w,equat.panel.y+equat.panel.h-holder.ySpace); //choose a target so that we can see our new equation
     
     ctrlPanel.swapGraphMode(graphDim ? GraphMode.RECT3D : GraphMode.RECT2D); //display the x key (and maybe the y key)
-    updateColorSelector(); //update the color selector
+    updateEquationMenu(); //update the equation menu
+  }
+  
+  void addEquation() {
+    int index = equatCache==null ? getHolder().numChildren() : getEquatIndex()+1; //first, we have to find the index we want to place this equation at
+    //if an equation is selected, we wanna put this right after that. Otherwise, we put this right at the very end
+    
+    addEquation(index);
   }
   
   boolean deleteEquation(boolean dim, EquatField eq) { //removes a specific equation
@@ -355,19 +399,59 @@ public static class EquatList { //a class for holding the list of equations to b
     
     saveEquationsToDisk(dim); //save our current equation list to disk
     
+    throwEquationInBin(ind, eq); //throw our equation in the recycling bin
+    
     return true; //return true, since it was successful
   }
   
-  boolean deleteEquation() { //deletes the equation cache (returns false if unsuccessful
+  boolean deleteEquation() { //deletes the equation cache (returns false if unsuccessful)
     if(equatCache==null) { return false; } //if there is no equation cache, return false since it was unsuccessful
-    deleteEquation(graphDim, equatCache); //delete the equation cache from the current equation list
+    if(!deleteEquation(graphDim, equatCache)) { return false; } //delete the equation cache from the current equation list (return false if unsuccessful)
     
     equatCache = null; mmio.setTyper(null); //set the equation cache and the typer to null
-    updateColorSelector(); //update the color selection box
+    updateEquationMenu(); //update the equation menu
     getHolder().chooseTargetRecursive(); //perform targeting to avoid being out of bounds
     
     return true; //return true because it was successful
   }
+  
+  void throwEquationInBin(Deque<Object[]> recycleBin, int ind, EquatField equat) {
+    recycleBin.addFirst(new Object[] {ind, equat});
+    while(recycleBin.size()>binCapacity) { recycleBin.pollLast(); }
+  }
+  void throwEquationInBin(int ind, EquatField equat) { throwEquationInBin(getBin(), ind, equat); }
+  
+  
+  boolean recoverEquation(Deque<Object[]> recycleBin, boolean saveToDisk) {
+    if(recycleBin.isEmpty()) { return false; }
+    
+    Object[] recovery = recycleBin.pollFirst();            //grab the equation to recover
+    int index = min((Integer)recovery[0], size(graphDim)); //get index
+    EquatField equat = (EquatField)recovery[1];            //get equation
+    equat.panel.setParent(getHolder());                    //put the equation's panel back in the holder
+    
+    getEquats(graphDim).add(index, equat);    //add this equation to our list, at the correct index
+    for(int n=index+1;n<size(graphDim);n++) { //loop through all equations after this one (we need to move them down)
+      Box secret = get(graphDim,n-1).panel; get(graphDim,n).panel.setY(secret.y+secret.h); //move their y position to right below the box above them
+    }
+    
+    updateSurfaceHeight(graphDim); //update the height of our surface
+    
+    updateSubscripts(graphDim); //update the subscripts for each equation
+    
+    if(saveToDisk) { saveEquationsToDisk(graphDim); } //save our current equation list to disk (unless told not to)
+    
+    mmio.setTyper(equat.typer); equatCache=equat; //select this equation for typing into
+    equat.typer.resetBlinker();                   //make the caret visible
+    
+    Panel holder = getHolder();
+    holder.chooseTargetRecursive(0.5*holder.w,equat.panel.y+holder.ySpace,0.5*holder.w,equat.panel.y+equat.panel.h-holder.ySpace); //choose a target so that we can see our new equation
+    
+    return true;
+  }
+  boolean recoverEquation() { return recoverEquation(getBin(), true); }
+  
+  
   
   boolean swapEquations(final int ind1, final int ind2) { //takes two equations and swaps their indices (returns if it was successful)
     ArrayList<EquatField> equatList = getEquats(); //grab the equation list
@@ -404,13 +488,14 @@ public static class EquatList { //a class for holding the list of equations to b
       grapher3D.setVisible( graphDim); //make this active IFF in 3D mode
     }
     
-    String axisButton = axisMode==0 ? "None" : axisMode==1 ? "Axes" : "Labels";
+    String axisButton = new String[] {"None","Axes","Labels"}[getAxisMode()];
     String connectButton = connect==ConnectMode.POINT ? "Points" : connect==ConnectMode.WIREFRAME ? "Wireframe" : "Surface";
     for(Box b : graphMenu) {
-      if(b.text[0].getText().equals("Roots")) { ((Button)b).setActive(!graphDim); }
-      else if(b.text[0].getText().equals("Inters.")) { ((Button)b).setActive(!graphDim); }
-      else if(b.text[0].getText().equals(axisButton)) { ((Button)b).setActive(graphDim); }
-      else if(b.text[0].getText().equals(connectButton)) { ((Button)b).setActive(graphDim); }
+      String text = b.text[0].getText();
+      if(text.equals("Roots")) { ((Button)b).setActive(!graphDim); }
+      //else if(text.equals("Inters.")) { ((Button)b).setActive(!graphDim); }
+      else if(text.equals(connectButton)) { ((Button)b).setActive(graphDim); }
+      else if(text.equals("None") || text.equals("Axes") || text.equals("Labels")) { ((Button)b).setActive(text.equals(axisButton)); }
     }
     
     if(bigHolder.active) { ctrlPanel.swapGraphMode(graphDim ? GraphMode.RECT3D : GraphMode.RECT2D); }
@@ -461,7 +546,7 @@ public static class EquatList { //a class for holding the list of equations to b
   boolean saveEquation(boolean save) { //saves the currently selected equation (returns whether it was successful)
     if(saveEquation(equatCache)) { //save the equation cache. if successful:
       mmio.setTyper(null); equatCache=null; //deselect equation
-      updateColorSelector();                //update the color select
+      updateEquationMenu();                //update the color select
       if(save) { saveEquationsToDisk(graphDim); } //if asked to save to disk, save to disk
       return true; //return true
     }
@@ -476,7 +561,7 @@ public static class EquatList { //a class for holding the list of equations to b
     updateSurfaceHeight(dim); //update the equation list panel's surface height
     
     equatCache = null; mmio.setTyper(null); //set the equation cache and the typer to null
-    updateColorSelector(); //update the color selection box
+    updateEquationMenu(); //update the color selection box
     getHolder().chooseTargetRecursive(); //perform targeting to avoid being out of bounds
     
     saveEquationsToDisk(dim); //save changes to disk

@@ -112,13 +112,20 @@ public static class Panel extends Box implements Iterable<Box> {
     if(surfaceFill) { graph.fill(surfaceFillColor); } else { graph.noFill(); } //set drawing attributes
     graph.noStroke(); //no stroke, we draw the border afterward
     
-    graph.rect(getX()-buffX, getY()-buffY, w, h, r); //draw the surface background, constrained to within the window
+    float left = getX()-buffX, top = getY()-buffY;
+    graph.rect(left, top, w, h, r); //draw the surface background, constrained to within the window
+    
+    //mmio.clipMan.pushClip(left, top, left+w, top+h, graph, graph.imageMode);
+    mmio.clipGraphics(graph, left, top, left+w, top+h);
     
     for(Box b : this) { if(b.active) {      //loop through all active children
       displayChild(b, graph, buffX, buffY); //display each child
     } }
     
     extraDisplay(graph, buffX, buffY); //run any extra functionality we might want to run
+    
+    //mmio.clipMan.popClip(graph, graph.imageMode);
+    mmio.unclipGraphics(graph);
     
     super.display(graph, buffX, buffY); //finally, draw the window over it all
   }
@@ -130,7 +137,9 @@ public static class Panel extends Box implements Iterable<Box> {
     final byte out = outCode(b.getX(),b.getY(),b.w,b.h,w,h); //use compressed cohen-sutherland algorithm to generate 5-bit outcode
     
     if((out&16)!=16) { //skip all boxes that are completely out of bounds
-      if(out==0) { b.display(graph, buffX-getX(), buffY-getY()); } //if box is completely in bounds: display it on the same PGraphics object
+      b.display(graph, buffX-getX(), buffY-getY());
+      
+      /*if(out==0) { b.display(graph, buffX-getX(), buffY-getY()); } //if box is completely in bounds: display it on the same PGraphics object
       else { //otherwise:
         
         if((out&12)==12) { throw new RuntimeException("ERROR: box is clipped left & right. Such behavior is not yet implemented, try to make children smaller than their parents!"); }
@@ -164,7 +173,7 @@ public static class Panel extends Box implements Iterable<Box> {
         graph.image(buff.graph, buffX2+getX()-buffX, buffY2+getY()-buffY); //display the buffer in the correct location (buffX2,buffY2 + pos of panel WRT graph)
         
         buff.useNt(); //put buffer out of use
-      }
+      }*/
     }
   }
   
@@ -188,20 +197,14 @@ public static class Panel extends Box implements Iterable<Box> {
   
   ////////////////////// UPDATES ///////////////////////////////
   
-  
-  boolean updateButtons(UICursor curs, final byte code, boolean selected) { //looks through all visible buttons in a panel and updates accordingly (selected = whether the cursor has already selected something)
+  @Override
+  boolean respondToChange(UICursor curs, final byte code, boolean selected) { //looks through all visible buttons in a panel and updates accordingly (selected = whether the cursor has already selected something)
     for(Box b : reverse()) { //loop through all the boxes in the panel (in reverse order)
-      if(b instanceof Panel) {                                     //if b is a panel: update it
-        selected = ((Panel)b).updateButtons(curs, code, selected); //cast to a panel, update all inner buttons, update selected
+      if(b instanceof Panel) {                            //if b is a panel: update it
+        selected = b.respondToChange(curs, code, selected); //update it and update selected (I guess, for some reason, here we use = instead of |=. Figure out why)
       }
-      else if(b instanceof Button) {                                   //if b is a button: update it
-        selected |= ((Button)b).respondToChange(curs, code, selected); //cast to a button, respond to the change, update selected
-      }
-      else if(b instanceof Textbox.CaretMover) {
-        selected |= ((Textbox.CaretMover)b).respondToChange(curs, code, selected); //cast to a caret mover, respond to the change, update selected
-      }
-      else if(b instanceof Textbox.TSHandle) {
-        selected |= ((Textbox.TSHandle)b).respondToChange(curs, code, selected); //cast to a text selection handle, respond to the change, update selected
+      else {
+        selected |= b.respondToChange(curs, code, selected); //otherwise, just update it
       }
     }
     return selected; //return whether something is already selected
@@ -214,7 +217,7 @@ public static class Panel extends Box implements Iterable<Box> {
     for(Box b : this) { //loop through all the boxes in the panel
       if(b instanceof Panel) {
         Panel p = (Panel)b; //cast to a panel
-        p.updateButtons(curs, curs.press==0 ? (byte)3 : 2, false); //update buttons given the mouse moved (even though it didn't, the panel moved)
+        p.respondToChange(curs, curs.press==0 ? (byte)3 : 2, false); //update buttons given the mouse moved (even though it didn't, the panel moved)
         if(p.updatePanelScroll(curs,eventX,eventY)) { return true; } //if an inner panel got an event, return true so we can immediately leave
       }
     }
@@ -284,7 +287,7 @@ public static class Panel extends Box implements Iterable<Box> {
   
   ////////////////////// SWIPING FUNCTIONALITY ////////////////////
   
-  void press(final UICursor curs) { //responds to cursor press
+  void press(final UICursor curs) { //responds to cursor press (does NOT perform any built-in functionality, just updates things)
     if(!hitbox(curs)) { return; } //if cursor not inside, exit TODO see if this is necessary AND see if you can use hitboxNoCheck
     
     if(pointers.size()==0) { //if this panel has no pointers:
@@ -306,7 +309,7 @@ public static class Panel extends Box implements Iterable<Box> {
     if(dragModeX!=DragMode.NONE && dragModeY!=DragMode.NONE) { curs.seLocked = true; } //if this panel can be dragged in both directions, lock select
   }
   
-  void release(final Cursor curs) { //responds to cursor release
+  void release(final Cursor curs) { //responds to cursor release (does NOT perform any built-in functionality, just updates things)
     if(!pointers.contains(curs)) { return; } //if cursor is not in pointer list, exit TODO see if this is even remotely necessary
     
     if(pointers.size()!=1) { //if this isn't the only pointer:
@@ -327,7 +330,7 @@ public static class Panel extends Box implements Iterable<Box> {
   void updateDrag() { //performs updates once per frames based on dragging functionality
     switch(dragModeX) { //what we do depends on the drag mode
       case NONE: break; //none: never do anything
-      case NORMAL: case ANDROID: if(pointers.size()!=0) { //normal/android: only do something if there are pointers
+      case NORMAL: case ANDROID: case SWIPE: if(pointers.size()!=0) { //normal/android/swipe: only do something if there are pointers
         float mean = 0;                              //first, we compute the mean of all the cursors' positions that are pointed at us (minus their initial positions)
         for(Cursor c : pointers) { mean+=c.x-c.xi; } //add them all up
         mean/=pointers.size();                       //divide by how many there are
@@ -336,23 +339,17 @@ public static class Panel extends Box implements Iterable<Box> {
       case IOS: {
         //TODO this
       } break;
-      case SWIPE: {
-        //TODO this
-      } break;
     }
     
     switch(dragModeY) { //what we do depends on the drag mode
       case NONE: break; //none: never do anything
-      case NORMAL: case ANDROID: if(pointers.size()!=0) { //normal/android: only do something if there are pointers
+      case NORMAL: case ANDROID: case SWIPE: if(pointers.size()!=0) { //normal/android/swipe: only do something if there are pointers
         float mean = 0;                              //first, we compute the mean of all the cursors' positions that are pointed at us (minus their initial positions)
         for(Cursor c : pointers) { mean+=c.y-c.yi; } //add them all up
         mean /= pointers.size();                     //divide by how many there are
         surfaceY = constrain(surfaceYi+mean,h-surfaceH,0); //move the surface to its initial position plus that shift
       } break;
       case IOS: {
-        //TODO this
-      } break;
-      case SWIPE: {
         //TODO this
       } break;
     }
@@ -518,7 +515,7 @@ public static class Panel extends Box implements Iterable<Box> {
           mean/=pointers.size();                       //divide by how many there are
           surfaceXi = target.x-mean;                   //now, instead of starting at xi, and having been shifted by mean, it started at target-mean, and was shifted by mean
         }
-        if(dragModeY==DragMode.NORMAL || dragModeX==DragMode.ANDROID) { //likewise, we do the same thing in the y direction, but only if appropriate
+        if(dragModeY==DragMode.NORMAL || dragModeY==DragMode.ANDROID) { //likewise, we do the same thing in the y direction, but only if appropriate
           float mean=0;
           for(Cursor c : pointers) { mean+=c.y-c.yi; }
           mean/=pointers.size();
@@ -572,12 +569,19 @@ public static class Panel extends Box implements Iterable<Box> {
   
   ////////////////////// OTHER //////////////////////
   
+  boolean surfaceIsMoving() { return surfaceVx!=0 && dragModeX!=DragMode.NONE || surfaceVy!=0 && dragModeY!=DragMode.NONE; } //whether the surface is moving
+  
   //NOTE: only use if cursor is in the parent's hitbox, or if there is no parent
   protected Box getCursorSelect(Cursor curs) { //searches through a panel and returns which object this cursor is hovering over
     if(!hitboxNoCheck(curs)) { return null; }  //if cursor is not in hitbox, skip
-    if(surfaceVx!=0 && dragModeX!=DragMode.NONE || surfaceVy!=0 && dragModeY!=DragMode.NONE) { return this; } //if this panel is moving, we automatically have to select it (it takes precedence)
+    //if(surfaceVx!=0 && dragModeX!=DragMode.NONE || surfaceVy!=0 && dragModeY!=DragMode.NONE) { return this; } //if this panel is moving, we automatically have to select it (it takes precedence)
+    //BUG!!!! If you press a button, the "deselect all buttons" method isn't run, so the button's press/release is still executed!
+    
+    boolean isMoving = surfaceIsMoving(); //if this panel is moving, then we cannot select any buttons that move with it
     
     for(Box b : reverse()) {   //loop through all the boxes in the panel
+      if(isMoving && b.mobile) { continue; } //if we are moving, and the box moves with it, skip this box
+      
       if(b instanceof Panel) { //if b is a panel:
         Box b2 = ((Panel)b).getCursorSelect(curs); //perform this recursively on said panel
         if(b2!=null) { return b2; }                //if b2 isn't null, return it TODO make sure this works with overlapping boxes. I'm pretty sure it does

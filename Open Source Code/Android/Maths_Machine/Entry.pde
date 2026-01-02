@@ -17,6 +17,8 @@ public static class Entry {
   
   MathObj asNum=null; //record the math object as a number (speeds up graphing)
   
+  MathFunc[] options=null; //the list of functions that this could refer to, if it is a function 
+  
   public Entry(String i) {
     id = i;                  //set ID
     type = getType(i);       //get entry type
@@ -44,6 +46,13 @@ public static class Entry {
   //@Override
   public boolean equals(Entry e) {
     return id.equals(e.id);
+  }
+  
+  MathFunc[] getFunctionList() {
+    if(options==null) {
+      options = functionDictionary.find(id);
+    }
+    return options;
   }
   
   String showFormattedId() { //some operators/functions are wrapped in __ (so that the compiler can differentiate different versions), and this prints them out without the __s

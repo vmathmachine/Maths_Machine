@@ -1,3 +1,25 @@
+import java.lang.reflect.Field;
+
+public static android.graphics.Canvas getCanvas(PGraphics pg) {
+  try {
+    Field canvasField = pg.getClass().getDeclaredField("canvas");
+    canvasField.setAccessible(true);
+    return (android.graphics.Canvas) canvasField.get(pg);
+  }
+  catch(NoSuchFieldException | IllegalAccessException ex) {
+    ex.printStackTrace(); return null;
+  }
+}
+
+static void clipCanvas(android.graphics.Canvas canvas, float x1, float y1, float x2, float y2) {
+  canvas.save();
+  canvas.clipRect(x1,y1,x2,y2);
+}
+
+static void unclipCanvas(android.graphics.Canvas canvas) {
+  canvas.restore();
+}
+
 public static class Mmio extends Panel { //the top level parent of all the IO objects in here, and the class solely responsible for all the IO functionality
   
   /////////////////////////// ATTRIBUTES //////////////////////////////
@@ -11,10 +33,34 @@ public static class Mmio extends Panel { //the top level parent of all the IO ob
   int buffWid=0, buffHig=0;                   //the width & height of the 2 dimensional array (yes, it must be a rectangular array, not a jagged array)
   long buffTime = System.currentTimeMillis(); //stores the time of the last attempt at buffer garbage collection
   
-  //ArrayList<UICursor> cursors = new ArrayList<UICursor>(); //all the cursors/touches/mice/pointers on screen
+  ClipManager clipMan = new ClipManager(); //this helps manage clipping for the sake of displaying things inside of windows
+  
   CursorList<UICursor> cursors = new CursorList<UICursor>(); //all the cursors/touches/mice/pointers on screen
   
   CursorActionQueue cursorActions = new CursorActionQueue(cursors, this); //list of all the pending cursor updates
+  
+  HashMap<PGraphics, android.graphics.Canvas> canvasMap = new HashMap<>();
+  android.graphics.Canvas grabCanvas(PGraphics pg) {
+    if(canvasMap.containsKey(pg)) { return canvasMap.get(pg); }
+    android.graphics.Canvas canvas = getCanvas(pg);
+    canvasMap.put(pg, canvas); return canvas;
+  }
+  void clipGraphics(PGraphics pg, float x1, float y1, float x2, float y2) {
+    if(pg instanceof processing.a2d.PGraphicsAndroid2D) {
+      clipCanvas(grabCanvas(pg), x1, y1, x2, y2);
+    }
+    else {
+      clipMan.pushClip(x1, y1, x2, y2, pg, pg.imageMode);
+    }
+  }
+  void unclipGraphics(PGraphics pg) {
+    if(pg instanceof processing.a2d.PGraphicsAndroid2D) {
+      unclipCanvas(grabCanvas(pg));
+    }
+    else {
+      clipMan.popClip(pg, pg.imageMode);
+    }
+  }
   
   //// specific options and key parameters
   

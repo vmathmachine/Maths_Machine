@@ -1,1 +1,0 @@
-Cannot invoke "complexnumbers.Complex.equals(double)" because "inp[0].number" is null

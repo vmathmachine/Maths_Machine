@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.EnumMap;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
 //import processing.sound.*;
 import complexnumbers.*;
@@ -194,13 +197,17 @@ void draw() {
     timePrev = time;           //update time
     io.updateCursorDPos();     //update previous draw positions (ALWAYS DO THIS AT THE END)
     
+    //if(frameCount%30==1) {
+    //  println("\nFramerate: "+frameRate+", frame count: "+frameCount);
+    //}
+    
     if(showPerformance && frameCount%30 == 1) { //DEBUG
       float rate = 30000f/(System.currentTimeMillis()-timeLastFrame);
       println("\nFramerate: "+rate+", frame count: "+frameCount);
       println("Time Record: ");
       long total=0; for(long n:timeRec) { total+=n; }
       float mean = (float)total/numTimesRec; float vari = (float)sumTimeSq/numTimesRec - mean*mean;
-      String rec="Total time (ms): "+mean+" (+-"+sqrt(vari/numTimesRec)+")"; println(rec);
+      String rec="Total time (ns): "+mean+" (+-"+sqrt(vari/numTimesRec)+")"; println(rec);
       rec="Times (ms): "; for(long n:timeRec) { rec+=(float)n/numTimesRec+"\t"; } println(rec);
       rec="Percentages: "; for(long n:timeRec) { rec+=n*100f/total+"\t"; } println(rec);
       rec="Dev of Percent: "; for(int n=0;n<timeRec.length;n++) { rec+=100f*sqrt(timeRecSq[n]-(float)(timeRec[n]*timeRec[n])/total)/total+"\t"; } println(rec);
@@ -247,14 +254,14 @@ void mouseMoved() {
   UICursor curs = io.cursors.get(0); //PC: there's only one cursor
   curs.updatePos(mouseX,mouseY);   //change the cursor position
   
-  curs.move();
+  curs.move(mouseX,mouseY);
 }
 
 void mouseDragged() {
   UICursor curs = io.cursors.get(0); //PC: there's only one cursor
   curs.updatePos(mouseX,mouseY);   //change the cursor position
   
-  curs.drag(); //perform dragging functionality
+  curs.drag(mouseX,mouseY); //perform dragging functionality
 }
 
 void keyPressed() {

@@ -50,6 +50,21 @@ public static class CMatrix { //Complex Matrix
     h=h_; w=w_; elements = c; //set dimensions and elements
   }
   
+  CMatrix(boolean column, CVector... v) {
+    if(v.length==0) { throw new MatrixSizeException("Ambiguous Dimensions: Cannot determine width of "+(column?"???x0":"0x???")+" matrix"); }
+    if(column) { h=v[0].size(); w=v.length; }
+    else       { h=v.length; w=v[0].size(); } //set dimensions
+    
+    elements = new Complex[h][w]; //load array
+    for(int j=0;j<w;j++) { //loop through all columns
+      if(v[j]==null)               { throw new NullPointerException("Matrix cannot have null "+(column?"columns":"rows")); }
+      if(v[j].size()!=v[0].size()) { throw new MatrixSizeException("Cannot create jagged matrix"); }
+      for(int i=0;i<h;i++) {                 //loop through all columns
+        elements[i][j] = (column ? v[j].get(i) : v[i].get(j)).copy(); //set each element (deep copying)
+      }
+    }
+  }
+  
   //////////////// INHERITED METHODS ///////////////////////
   
   @Override
@@ -94,10 +109,10 @@ public static class CMatrix { //Complex Matrix
       for(int j=0;j<w;j++) { //loop through all columns
         if(elements[i][j].lazyabs()<threshold) { res.append("0"); } //if this element is below our threshold, round down to 0
         else { res.append(elements[i][j].toString(dig)); } //concatenate each individual element, outputted to the given amount of precision
-        if(j!=w-1) { res.append(","); }                    //put a comma after all entries but the last
+        if(j!=w-1) { res.append(", "); }                    //put a comma after all entries but the last
       }
       res.append("]");                //end each row with a right bracket
-      if(i!=h-1) { res.append(","); } //put a comma after all rows but the last
+      if(i!=h-1) { res.append(", "); } //put a comma after all rows but the last
     }
     return res.append("]").toString(); //close with right bracket, return result
   }
@@ -480,6 +495,15 @@ public static class CMatrix { //Complex Matrix
     return prod; //return result
   }
   
+  Complex innerProduct(final CMatrix m) { // takes the non-conjugated frobenius product (even more similar to the dot product)
+    if(h!=m.h || w!=m.w) { throw new MatrixSizeException("Cannot take inner product between "+getDimensions()+" and "+m.getDimensions()); } //if different dimensions, throw exception
+    Complex prod = new Complex(); //initialize product to 0
+    for(int i=0;i<h;i++) for(int j=0;j<w;j++) { //loop through all elements
+      prod.addeq(elements[i][j].mul(m.elements[i][j])); //add together each element-wise product
+    }
+    return prod; //return result
+  }
+  
   double frobeniusSq() { //takes the square frobenius norm
     double prod = 0; //initialize product to 0
     for(Complex[] a : elements) for(Complex b : a) { //loop through all elements
@@ -490,6 +514,18 @@ public static class CMatrix { //Complex Matrix
   
   double frobenius() { //takes the frobenius norm
     return Math.sqrt(frobeniusSq());
+  }
+  
+  Complex innerSq() { //takes the inner product with self
+    Complex prod = new Complex(); //init to 0
+    for(Complex[] a : elements) for(Complex b : a) { //loop through all elements
+      prod.addeq(b.sq()); //add together their squares
+    }
+    return prod;
+  }
+  
+  Complex innerNorm() { //takes self inner product norm
+    return innerSq().sqrt(); //take self inner product's square root
   }
   
   //////////////////// MATRIX SOLVING ////////////////////////////////////
@@ -566,7 +602,7 @@ public static class CMatrix { //Complex Matrix
   void reduceRowEchelon() { //takes row echelon matrix and converts to reduced row echelon (backsolving)
     for(int row=h-1;row>=0;row--) { //loop through all rows backwards
       int column = leadingNonzeroIndex(elements[row], row); //find the first non-zero index
-      if(column==w) { continue; }                       //if out of bounds, go to the next iteration (on the previous row)
+      if(column==w) { continue; }                           //if out of bounds, go to the next iteration (on the previous row)
       if(!elements[row][column].equals(1)) { throw new RuntimeException("Why the fuck is the leading term "+elements[row][column]+"?"); } //TEST
       for(int i=0;i<row;i++) {              //loop through all rows before this one
         Complex lead = elements[i][column]; //grab the element on this row, above the leading term of row row
@@ -585,7 +621,7 @@ public static class CMatrix { //Complex Matrix
       for(int j=0;j<w;j++) { aug[i][j] = elements[i][j].clone(); } //copy over these elements
       for(int j=0;j<m.w;j++) { aug[i][j+w] = m.elements[i][j].clone(); } //copy over the elements from the other matrix
     }
-    return new CMatrix(h,w+m.w,aug); //construct and return the new augmented matrix
+    return new CMatrix(h,w+m.w,aug); //construct & return the new augmented matrix
   }
   
   CMatrix augment(CVector v) { //returns the result of augmenting this matrix with a vector
@@ -596,6 +632,26 @@ public static class CMatrix { //Complex Matrix
       aug[i][w] = v.elements[i].clone(); //copy over the elements from the vector
     }
     return new CMatrix(h,w+1,aug); //construct & return the new augmented matrix
+  }
+  
+  CMatrix augmentBelow(CMatrix m) { //vertical augmentation
+    if(w!=m.w) { throw new MatrixSizeException("Cannot vertically augment "+getDimensions()+" with "+m.getDimensions()); }
+    Complex[][] aug = new Complex[h+m.h][w]; //instantiate new augmented matrix
+    for(int j=0;j<w;j++) { //loop through all columns
+      for(int i=0;i<h;i++) { aug[i][j] = elements[i][j].clone(); } //copy over these elements
+      for(int i=0;i<m.h;i++) { aug[i+h][j] = m.elements[i][j].clone(); } //copy over the elements from the other matrix
+    }
+    return new CMatrix(h+m.h,w,aug); //construct & return the new augmented matrix
+  }
+  
+  CMatrix augmentBelow(CVector v) { //vertical augmentation
+    if(w!=v.size()) { throw new MatrixSizeException("Cannot vertically augment "+getDimensions()+" with vector of size "+v.size()); }
+    Complex[][] aug = new Complex[h+1][w]; //instantiate new augmented matrix
+    for(int j=0;j<w;j++) { //loop through all columns
+      for(int i=0;i<h;i++) { aug[i][j] = elements[i][j].clone(); } //copy over these elements
+      aug[h][j] = v.elements[j].clone(); //copy over the elements from the vector
+    }
+    return new CMatrix(h+1,w,aug); //construct & return the new augmented matrix
   }
   
   CMatrix leftDivide(CMatrix m) { //computes this^-1 * m
@@ -714,6 +770,70 @@ public static class CMatrix { //Complex Matrix
     return transpose().leftDivide(v); //now, just transpose this, then perform left division. Surprisingly, yes, it is exactly that simple
   }
   
+  Complex[][] nullSpaceInPlace(boolean fix) {
+    rowEchelon();              //put into upper row echelon
+    if(fix) { elements[h-1][w-1].set(0); } //make the bottom right element 0 (roundoff)
+    reduceRowEchelon();        //put it into reduced row echelon form (rref)
+    
+    //now, we have to make the matrix square
+    if(w!=h) {
+      Complex[][] elements2 = new Complex[w][];
+      for(int i=0;i<w && i<h;i++) { elements2[i] = elements[i]; }
+      for(int i=h;i<w;i++) {
+        elements2[i] = new Complex[w];
+        for(int j=0;j<w;j++) { elements2[i][j] = Cpx.zero(); }
+      }
+      elements = elements2; h=w;
+    }
+    
+    //IMPORTANT next, we have to rearrange our rows so that each row either has a leading 1 in the diagonal element or is empty (i.e. all 0)
+    int dim = 0; //at the same time, we will also calculate the dimension of our null space (which is equal to the number of rows which are all 0s)
+    boolean pivot[] = new boolean[h]; //this array will tell us which rows will and won't be used as pivot points for our eigenspace (true=will, false=won't)
+    //the word "pivot" isn't being used properly here
+    
+    for(int i=0;i<h;i++) { //loop through all rows
+      if(!elements[i][i].equals(1)) {    //if the diagonal element isn't 1:
+        Complex[] temp = elements[h-1];  //grab the last row (which is empty)
+        for(int i2=h-1;i2>i;i2--) {      //loop through all rows backwards
+          elements[i2] = elements[i2-1]; //replace each row w/ the previous row
+        }
+        elements[i] = temp; //replace this row with that empty row at the end
+        
+        pivot[i] = true; //this row can and will be used as a pivot 
+        ++dim;           //increment the geometric multiplicity
+      }
+    }
+    //IT SHOULD BE NOTED: Now, if you were to change the height to convert to a square matrix, then subtract the identity from this matrix, the nonzero columns would form a basis for the null space
+    //We're going to imagine that the identity has been implicitly subtracted
+    
+    Complex[][] vecs = new Complex[dim][h]; //create array of arrays, each of which will be used to initialize vectors
+    
+    int ind = 0; //the index in our vecs array
+    for(int i=0;i<h;i++) if(pivot[i]) { //loop through all rows in our rref matrix (skip the non-pivots, they are implicitly 0 vectors)
+      for(int j=0;j<w;j++) { vecs[ind][j] = i==j ? Cpx.mOne() : elements[j][i]; } //copy over our column into this vector (remember to subtract 1 from the diagonal)
+      ++ind; //increment the index
+    }
+    
+    return vecs; //return our basis of vectors
+  }
+  
+  CVector[] nullSpace(boolean fix) {
+    Complex[][] arr = clone().nullSpaceInPlace(fix);
+    CVector[] basis = new CVector[arr.length];
+    for(int i=0;i<arr.length;i++) { basis[i] = new CVector(arr[i]); }
+    return basis;
+  }
+  
+  CMatrix nullSpaceMatrix(boolean fix) {
+    CVector[] columns = nullSpace(fix);
+    if(columns.length==0) { return new CMatrix(h,0); }
+    return new CMatrix(true, columns);
+  }
+  
+  static CMatrix basisSubtract(CMatrix b1, CMatrix b2) { //performs b1\b2
+    return b1.mul(b2.transpose().mul(b1).nullSpaceMatrix(false));
+  }
+  
   ///////////////////////////////////////// EIGENVALUES / EIGENVECTORS /////////////////////////////////////////////////////
   
   public CMatrix upperHessenberg() { //computes & returns the upper hessenberg form
@@ -810,8 +930,17 @@ public static class CMatrix { //Complex Matrix
   }
   
   private static Complex[] eigenvalues2x2(Complex[][] mat) { //finds the eigenvalues of the given 2x2 matrix
-    Complex ht = mat[0][0].lazyabs()>=9.97920154767359906D ? mat[0][0].scalb(-1).addeq(mat[1][1].scalb(-1)) : mat[0][0].add(mat[1][1]).scalbeq(-1); //compute the half trace (never overflows)
-    Complex dt = mat[0][0].mul(mat[1][1]).subeq(mat[0][1].mul(mat[1][0]));                                                                          //compute the determinant (might overflow)
+    Complex ht = mat[0][0].lazyabs()>=9.97920154767359906E291D ? mat[0][0].scalb(-1).addeq(mat[1][1].scalb(-1)) : mat[0][0].add(mat[1][1]).scalbeq(-1); //compute the half trace (never overflows)
+    Complex dt = mat[0][0].mul(mat[1][1]).subeq(mat[0][1].mul(mat[1][0]));                                                                              //compute the determinant (might overflow)
+    
+    //Explanation for ht: ht = (x+y)/2 = x/2+y/2. If x and y are big, x+y might overflow despite (x+y)/2 being normal. If x and y are subnormal, (x+y)/2 is more precise than x/2+y/2.
+    //Therefore, we need to do (x+y)/2 if the numbers are small, and x/2+y/2 if the numbers are big. (x+y)/2 is clearly more efficient than x/2+y/2, so we want the threshold to
+    //favor (x+y)/2. We have to perform at least one inequality to determine which equation to use. However, testing both x and y is wasteful, and would likely overshadow any potential
+    //performance gained from doing one less scalb. Therefore, we only test x (mat[0][0]).
+    
+    //The smallest x can possibly be for non-infinite x and y's sum to overflow is 2^970. More specifically, x=2^970, y=2^1023*(2-2^-52). y's ulp is 2^971, x>=ulp/2,
+    //so x rounds up to 2^971 in the addition and we get 2^1023(2-2^-52)+2^970 = 2^1024 = overflow.
+    
     if(dt.isInf() || dt.isNaN()) { //if infinite or NaN:
       ht.scalbeq(-512); dt = mat[0][0].scalb(-512).mul(mat[1][1].scalb(-512)).subeq(mat[0][1].scalb(-512).mul(mat[1][0].scalb(-512))); //divide half trace by 2^512, determinant by 2^1024
       Complex[] eig = solveQuad(ht, dt);        //solve the quadratic
@@ -882,6 +1011,10 @@ public static class CMatrix { //Complex Matrix
     
     putInUpperHessenberg(); //convert this matrix to upper hessenberg
     int iter = 0;
+    
+    LinkedList<CMatrix> history = new LinkedList<CMatrix>();
+    int historySize = 4;
+    
     while(h>1) { //perform the following until we only have 1 (or 0) rows left
       
       if(elements[h-1][w-2].lazyabs() <= elements[h-1][w-1].ulpMax()*8) { //if the lowest subdiagonal element is practically 0:
@@ -890,6 +1023,8 @@ public static class CMatrix { //Complex Matrix
         Complex[][] replace = new Complex[h-1][w-1];      //begin shrinking the matrix by 1
         copy2DArray(elements, 0,0, replace,0,0, h-1,w-1); //copy the elements over to the replace matrix
         elements = replace; h--; w--;                     //replace the elements array, decrement dimensions
+        
+        history.clear();
         
         continue; //start the iteration all over (to make sure height is at least 1)
       }
@@ -901,9 +1036,33 @@ public static class CMatrix { //Complex Matrix
       if(vals[0].sub(elements[h-1][w-1]).lazyabs() <= vals[1].sub(elements[h-1][w-1]).lazyabs()) { scalar = vals[0]; } //set our scalar to whichever eigenvalue is closest to the bottom right element
       else                                                                                       { scalar = vals[1]; }
       
-      CMatrix[] qr = subeq(scalar).qrDecomposeHessy(); //subtract the scalar, then QR decompose (note: this matrix will be in upper hessenberg)
-      elements = mul(qr[0]).elements;                  //replace this (which is Q*R) with R*Q
-      addeq(scalar);                                   //add back the scalar
+      subeq(scalar);
+      
+      history.addFirst(clone());
+      while(history.size()>historySize) { history.removeLast(); }
+      
+      
+      CMatrix[] qr = qrDecomposeHessy(); //subtract the scalar, then QR decompose (note: this matrix will be in upper hessenberg)
+      //elements = mul(qr[0]).elements;                //replace this (which is Q*R) with R*Q
+      
+      CMatrix prod = mul(qr[0]);
+      
+      boolean repeat = false;
+      for(CMatrix mat : history) {
+        if(compareElementwiseAbs(mat, prod)) { repeat = true; break; }
+      }
+      
+      if(repeat) {
+        double eps = Math.scalb(biggest(),-13);
+        scalar.addeq(eps);
+        elements = history.getFirst().clone().elements; subeq(eps);
+        qr = qrDecomposeHessy();
+        prod = mul(qr[0]);
+      }
+      //else { println(history.getFirst(), prod, qr[0], qr[1]); }
+      elements = prod.elements;
+      
+      addeq(scalar); //add back the scalar
       iter++;
     }
     
@@ -911,6 +1070,35 @@ public static class CMatrix { //Complex Matrix
     
     return eigen; //and now, finally, return the eigenvalues
   }
+  
+  private static boolean sameAbs(Complex a, Complex b) {
+    double abs1 = a.absq(), abs2 = b.absq();
+    if(abs1==0) { return a.equals(0) ? b.equals(0) : sameAbs(a.scalb(512), b.scalb(512)); }
+    if(abs1+abs2==Mafs.INF) { return a.isInf() ? b.isInf() : sameAbs(a.scalb(-512), b.scalb(-512)); }
+    return abs1==abs2;
+  }
+  
+  private static boolean compareElementwiseAbs(CMatrix a, CMatrix b) {
+    for(int i=0;i<a.h;i++) for(int j=0;j<a.w;j++) {
+      if(!sameAbs(a.elements[i][j], b.elements[i][j])) { return false; }
+    }
+    return true;
+  }
+  
+  /*private static boolean closeAbs(Complex a, Complex b, double eps) {
+    double abs1 = a.absq(), abs2 = b.absq();
+    if(abs1+abs2==Mafs.INF) { return a.isInf() ? b.isInf() : closeAbs(a.scalb(-512), b.scalb(-512), Math.scalb(eps,-512)); }
+    return Math.abs(abs1-abs2)<=eps*eps;
+  }
+  
+  private static boolean compareElementwiseAbs(CMatrix a, CMatrix b, double eps) {
+    for(int i=0;i<a.h;i++) for(int j=0;j<a.w;j++) {
+      if(!closeAbs(a.elements[i][j], b.elements[i][j], eps)) { return false; }
+    }
+    return true;
+  }
+  
+  private static boolean compareElementwiseAbs(CMatrix a, CMatrix b) { return compareElementwiseAbs(a, b, Math.scalb(a.biggest(),-26)); }*/
   
   public Complex[] eigenvalues() { //computes the eigenvalues
     if(h!=w) { throw new RuntimeException("Cannot compute eigenvalues for "+getDimensions()+" (only works for square matrices)"); } //if not square, throw an exception
@@ -927,10 +1115,10 @@ public static class CMatrix { //Complex Matrix
     }
     //now, finally, we have to group together identical eigenvalues
     for(int n=0;n<h;) { //loop through the eigenvalue array
-      int mult = 1; //multiplicity of this eigenvalue
+      int mult = 1;     //multiplicity of this eigenvalue
       while(n+mult<h && eig[n].equals(eig[n+mult])) { mult++; } //for each identical eigenvalue right after this one, increment multiplicity (also, make sure to stop before going out of bounds)
       for(int k=n+mult+1;k<h;k++) {   //loop through all eigenvalues after the group of identical eigenvalues (also skip the one that was obviously different)
-        if(eig[n].equals(eig[k])) { //if both eigenvalues are the same
+        if(eig[n].equals(eig[k])) {   //if both eigenvalues are the same
           Complex temp = eig[n+mult]; eig[n+mult] = eig[k]; eig[k] = temp; ++mult; //swap both indices, increment multiplicity
         }
       }
@@ -944,43 +1132,15 @@ public static class CMatrix { //Complex Matrix
   private CVector[] eigenvectorsGivenEigenvalues(Complex[] vals) { //computes the eigenvectors given the eigenvalues
     CVector[] vec = new CVector[h]; //initialize vector array
     for(int n=0;n<h;) {             //loop through all eigenvalues/vectors
-      int mult = 1; //first, find the multiplicity of this eigenvalue
+      int mult = 1; //first, find the algebraic multiplicity of this eigenvalue
       for(int k=n+1;k<h && vals[n].equals(vals[k]);k++) { ++mult; } //increment multiplicity until we reach the end or find an eigenvalue that's different
       
-      CMatrix rref = sub(vals[n]);      //subtract each eigenvalue to create a degenerate matrix
-      rref.rowEchelon();                //put into upper row echelon
-      rref.elements[h-1][w-1].set(0);   //make the bottom right element 0
-      rref.reduceRowEchelon();          //put it into reduced row echelon form (rref)
+      CMatrix degen = sub(vals[n]); //subtract each eigenvalue to create a degenerate matrix
       
-      //next, we have to rearrange our rows so that each row either has a leading 1 in the diagonal element or is empty (i.e. all 0)
-      int dim = 0; //at the same time, we will also calculate the dimension of our eigenspace (which is equal to the number of rows which are all 0s)
-      boolean pivot[] = new boolean[h]; //this array will tell us which rows will and won't be used as pivot points for our eigenspace (true=will, false=won't)
+      Complex[][] vecs = degen.nullSpaceInPlace(true); //take the null space
+      int dim = vecs.length; //take the geometric multiplicity
       
-      for(int i=0;i<h;i++) { //loop through all rows
-        if(!rref.elements[i][i].equals(1)) { //if the diagonal element isn't 1:
-          Complex[] temp = rref.elements[h-1]; //grab the last row (which is empty
-          for(int i2=h-1;i2>i;i2--) { //loop through all rows backwards
-            rref.elements[i2] = rref.elements[i2-1]; //replace each row w/ the previous row
-          }
-          rref.elements[i] = temp; //replace this row with that empty row at the end
-          
-          pivot[i] = true; //this row can and will be used as a pivot 
-          ++dim;           //increment the eigenspace dimension
-        }
-      }
-      
-      Complex[][] vecs = new Complex[dim][h]; //create array of arrays, each of which will be used to initialize vectors
-      
-      int ind = 0; //the index in our vecs array
-      for(int i=0;i<h;i++) if(pivot[i]) { //loop through all rows in our rref matrix (skip the non-pivots)
-        //set the corresponding vector equal to the negative of column i, but with the diagonal element set to 1
-        for(int j=0;j<i;j++) { vecs[ind][j] = rref.elements[j][i].negeq(); } //set the elements above this to the negative of the corresponding elements
-        vecs[ind][i] = Cpx.one(); //set the diagonal element to 1
-        for(int j=i+1;j<h;j++) { vecs[ind][j] = rref.elements[j][i]; } //set the elements below to the corresponding elements (which are all 0, but let's save space :) )
-        ++ind; //increment the index
-      }
-      
-      for(int n2=0;n2<dim;n2++) { //now, we have to loop through all the basis vectors we're going to insert
+      for(int n2=0;n2<vecs.length;n2++) { //now, we have to loop through all the basis vectors we're going to insert
         vec[n+n2] = new CVector(vecs[n2]).frobeniusUnit(); //set each vector (making sure to normalize it)
       }
       
@@ -1008,6 +1168,71 @@ public static class CMatrix { //Complex Matrix
     return new Object[] {val, vec};
   }
   
+  CMatrix[] jordanDecomposition() {
+    
+    if(h!=w) { throw new RuntimeException("Cannot compute Jordan decomposition for "+getDimensions()+" (only works for square matrices)"); }
+    if(h==0) { return new CMatrix[] {new CMatrix(), new CMatrix(), new CMatrix()}; }
+    
+    Complex[] val = eigenvalues(); //get the eigenvalues
+    
+    CVector[] genEigenvectors = new CVector[w]; //list of eigenvectors/generalized eigenvectors
+    boolean[] superDiag = new boolean[w]; //true if we put a 1 in the J matrix's superdiagonal in this column, false if we put a 0 (or put nothing, like at the beginning)
+    int ind = 0; //index of the vectors/values
+    
+    for(int n=0;n<val.length;n++) { //loop through all eigenvalues
+      //(DECISIVENESS NOTE: int mult=1; used to be outside the loop. It got moved inside because multiplicity doesn't carry over from previous eigenvalues.
+      // If you find a reason to move it back out, please think very hard about it.)
+      int mult=1; //multiplicity for the current eigenvalue
+      while(n<val.length-1 && val[n+1].equals(val[n])) { ++mult; ++n; } //find the algebraic multiplicity of this eigenvalue
+      
+      ArrayList<CMatrix> basis = new ArrayList<CMatrix>(); //now, we have to find the kernels of M-λ, (M-λ)², (M-λ)³, ... until (M-λ)^n such that dim(ker((M-λ)^n))) = mult
+      CMatrix pow = sub(val[n]), multiplier = pow;
+      CMatrix curr;
+      do {
+        basis.add(curr=pow.nullSpaceMatrix(true));
+        pow = pow.mul(multiplier);
+      } while(curr.w < mult);
+      
+      //Now, we have the kernels of each relevant power of M-λ. From here, we must exclude from each kernel the previous kernel, reducing them each down to
+      //the basis of the generalized eigenvectors in each specific link in the Jordan chain
+      
+      for(int k=basis.size()-1;k>0;k--) { //loop through all bases BACKWARDS (excluding that of the true eigenvectors, which have nothing to remove)
+        basis.set(k, basisSubtract(basis.get(k), basis.get(k-1))); //remove the set of vectors not perpendicular to the previous basis
+      }
+      
+      //next, we have to reorder the bases so that the root vectors are listed bases
+      for(int k=basis.size()-2;k>=0;k--) {                      //loop through all bases backwards (excluding the last one, which doesn't need to be reordered)
+        CMatrix roots = multiplier.mul(basis.get(k+1));         //find the basis for vectors that are roots to the next basis
+        CMatrix reordered = basisSubtract(basis.get(k), roots); //remove our root vectors
+        basis.set(k, roots.augment(reordered));                 //put them back in at the very front
+      }
+      
+      //THIS IS WHERE WE'D DO FROBENIUS NORMALIZATION, IF ASKED TO
+      
+      for(int i=0;i<basis.size();i++) { basis.set(i, basis.get(i).transpose()); } //trust me, it's easier to have it listed like this
+      
+      for(int p=0;p<basis.get(0).h;p++) { //loop through all the eigenvectors
+        for(int b=0;b<basis.size();b++) { //loop through all bases
+          if(p>=basis.get(b).h) { break; } //if p is bigger than the largest index in this basis, quit
+          
+          genEigenvectors[ind] = new CVector(basis.get(b).elements[p]); //append each eigenvector
+          superDiag[ind] = b!=0; //we have a 1 here if and only if it's not a regular eigenvector
+          ind++; //increment index
+        }
+      }
+    }
+    
+    CMatrix p = new CMatrix(true, genEigenvectors);
+    CMatrix j = new CMatrix(h,w);
+    for(int i=0;i<h;i++) {
+      j.elements[i][i] = val[i];
+      if(superDiag[i]) { j.elements[i-1][i] = Cpx.one(); }
+    }
+    CMatrix pInv = p.inv();
+    
+    return new CMatrix[] {p, j, pInv};
+  }
+  
   ///////////////////////////////////////// POWERS, LOGARITHMS, AND OTHER IMPORTANT FUNCTIONS //////////////////////////////////////
   
   CMatrix sq() { return mul(this); } //square
@@ -1018,6 +1243,7 @@ public static class CMatrix { //Complex Matrix
     
     if(!isSquare()) { throw new RuntimeException("Cannot raise "+getDimensions()+" ^ "+a+" (it's not a square)"); }
     
+    if(a==0x80000000) { return inv().sq().pow(a>>1); } //SC: largest negative power, reduce problem to avoid stack overflow
     if(a<0) { return inv().pow(-a); } //a is negative: return inverse ^ -a
     
     CMatrix ans=CMatrix.identity(h); //return value: M^a (init to Identity in case a==0)
@@ -1041,30 +1267,56 @@ public static class CMatrix { //Complex Matrix
     if((int)a==a) { return pow((int)a); }
     if(!isSquare()) { throw new RuntimeException("Cannot raise "+getDimensions()+" ^ "+a+" (it's not a square)"); }
     
-    Complex[] vals = eigenvalues();
-    CVector[] vecs = eigenvectorsGivenEigenvalues(vals);
+    CMatrix[] jordan = jordanDecomposition();
     
-    Complex[][] vArr = new Complex[h][w];
-    Complex[][] lArr = new Complex[h][w];
-    for(int i=0;i<h;i++) for(int j=0;j<w;j++) { vArr[i][j] = vecs[j].elements[i]; lArr[i][j] = i==j ? vals[i].pow(a) : new Complex(); }
-    CMatrix vMat = new CMatrix(h,w, vArr), lMat = new CMatrix(h,w, lArr);
+    for(int i=1;i<=h;) {
+      int mult = 1;
+      for(int j=i+1;j<=w && !jordan[1].get(j-1,j).equals(0);j++) {
+        mult++;
+      }
+      
+      Complex val = jordan[1].get(i,i);
+      Complex pow = val.pow(a);
+      Complex inv = val.inv();
+      for(int j=0;j<mult;j++) {
+        for(int k=0;j+k<mult;k++) {
+          jordan[1].set(i+k,i+j+k, pow.copy());
+        }
+        pow.muleq(inv).muleq((a-j)/(j+1));
+      }
+      
+      i+=mult;
+    }
     
-    return vMat.mul(lMat).rightDivide(vMat);
+    return jordan[0].mul(jordan[1]).mul(jordan[2]);
   }
   
   CMatrix pow(Complex a) {
     if(a.isReal()) { return pow(a.re); }
     if(!isSquare()) { throw new RuntimeException("Cannot raise "+getDimensions()+" ^ "+a+" (it's not a square)"); }
     
-    Complex[] vals = eigenvalues();
-    CVector[] vecs = eigenvectorsGivenEigenvalues(vals);
+    CMatrix[] jordan = jordanDecomposition();
     
-    Complex[][] vArr = new Complex[h][w];
-    Complex[][] lArr = new Complex[h][w];
-    for(int i=0;i<h;i++) for(int j=0;j<w;j++) { vArr[i][j] = vecs[j].elements[i]; lArr[i][j] = i==j ? vals[i].pow(a) : new Complex(); }
-    CMatrix vMat = new CMatrix(h,w, vArr), lMat = new CMatrix(h,w, lArr);
+    for(int i=1;i<=h;) {
+      int mult = 1;
+      for(int j=i+1;j<=w && !jordan[1].get(j-1,j).equals(0);j++) {
+        mult++;
+      }
+      
+      Complex val = jordan[1].get(i,i);
+      Complex pow = val.pow(a);
+      Complex inv = val.inv();
+      for(int j=0;j<mult;j++) {
+        for(int k=0;j+k<mult;k++) {
+          jordan[1].set(i+k,i+j+k, pow.copy());
+        }
+        pow.muleq(inv).muleq(a.sub(j).diveq(j+1));
+      }
+      
+      i+=mult;
+    }
     
-    return vMat.mul(lMat).rightDivide(vMat);
+    return jordan[0].mul(jordan[1]).mul(jordan[2]);
   }
   
   CMatrix sqrt(boolean... b) {
@@ -1074,26 +1326,55 @@ public static class CMatrix { //Complex Matrix
     if(h==0) { return new CMatrix(0,0); }
     if(h==1) { return new CMatrix(1,1,b[0] ? elements[0][0].sqrt() : elements[0][0].sqrt().negeq()); }
     if(h==2) {
+      if(elements[0][0].equals(0) && elements[0][1].equals(0) && elements[1][0].equals(0) && elements[1][1].equals(0)) { return CMatrix.zero(2,2); }
       Complex[] vals = eigenvalues2x2(elements);
       Complex l1 = b[0] ? vals[0].sqrt() : vals[0].sqrt().negeq(), l2 = b[1] ? vals[1].sqrt() : vals[1].sqrt().negeq();
-      return add(l1.mul(l2)).diveq(l1.add(l2));
+      return add(l1.mul(l2)).diveq(l1.add(l2)); //I'm pretty sure this is just about the most efficient way to evaluate this
     }
     
-    Complex[] vals = eigenvalues();
-    CVector[] vecs = eigenvectorsGivenEigenvalues(vals);
+    CMatrix[] jordan = jordanDecomposition();
     
-    Complex[][] vArr = new Complex[h][w];
-    Complex[][] lArr = new Complex[h][w];
-    for(int i=0;i<h;i++) for(int j=0;j<w;j++) { vArr[i][j] = vecs[j].elements[i]; lArr[i][j] = i==j ? (b[i] ? vals[i].sqrt() : vals[i].sqrt().negeq()) : new Complex(); }
-    CMatrix vMat = new CMatrix(h,w, vArr), lMat = new CMatrix(h,w, lArr);
+    for(int i=1;i<=h;) {
+      int mult = 1;
+      for(int j=i+1;j<=w && !jordan[1].get(j-1,j).equals(0);j++) {
+        mult++;
+      }
+      
+      Complex val = jordan[1].get(i,i);
+      Complex func = val.sqrt(); if(!b[i]) { func.negeq(); }
+      Complex inv = val.inv();
+      for(int j=0;j<mult;j++) {
+        for(int k=0;j+k<mult;k++) {
+          jordan[1].set(i+k,i+j+k, func.copy());
+        }
+        func.muleq(inv).muleq((0.5-j)/(j+1));
+      }
+      
+      i+=mult;
+    }
     
-    return vMat.mul(lMat).rightDivide(vMat);
+    return jordan[0].mul(jordan[1]).mul(jordan[2]);
   }
   
   private CMatrix evaluateFunction(String name, MatFunc f) {
     if(!isSquare()) { throw new RuntimeException("Cannot evaluate"+name+" on "+getDimensions()+" (it's not a square)"); }
     
-    Complex[] vals = eigenvalues();
+    if(h==0) { return new CMatrix(0,0); }
+    if(h==1) { return new CMatrix(1,1,f.func(0,elements[0][0])); }
+    if(h==2) {
+      Complex[] vals = eigenvalues2x2(elements);
+      if(vals[0].sub(vals[1]).lazyabs() <= Math.scalb(Math.ulp(biggest()),12)) {
+        Complex l = vals[0].add(vals[1]).scalbeq(-1), h = vals[0].sub(vals[1]).scalbeq(-1);
+        CMatrix  oddPart = sub(l).muleq(f.func(1,l).addeq(f.func(3,l).muleq(h.sq().div(6))));
+        Complex evenPart = f.func(0,l).addeq(f.func(2,l).muleq(h.sq().mul(0.5)));
+        return oddPart.addeq(evenPart);
+      }
+      Complex inv = vals[0].sub(vals[1]).inv();
+      Complex f0 = f.func(0,vals[0]), f1 = f.func(0,vals[1]);
+      return mul(f0.sub(f1).mul(inv)).addeq(vals[0].mul(f1).sub(vals[1].mul(f0)).muleq(inv));
+    }
+    
+    /*Complex[] vals = eigenvalues();
     CVector[] vecs = eigenvectorsGivenEigenvalues(vals);
     
     Complex[][] vArr = new Complex[h][w];
@@ -1103,7 +1384,30 @@ public static class CMatrix { //Complex Matrix
     }
     CMatrix vMat = new CMatrix(h,w, vArr), lMat = new CMatrix(h,w, lArr);
     
-    return vMat.mul(lMat).rightDivide(vMat);
+    return vMat.mul(lMat).rightDivide(vMat);*/
+    
+    CMatrix[] jordan = jordanDecomposition();
+    
+    for(int i=1;i<=h;) {
+      int mult = 1;
+      for(int j=i+1;j<=w && !jordan[1].get(j-1,j).equals(0);j++) {
+        mult++;
+      }
+      
+      Complex val = jordan[1].get(i,i);
+      double fact = 1;
+      for(int j=0;j<mult;j++) {
+        Complex func = f.func(j, val).div(fact);
+        for(int k=0;j+k<mult;k++) {
+          jordan[1].set(i+k,i+j+k, func.copy());
+        }
+        fact*=j+1;
+      }
+      
+      i+=mult;
+    }
+    
+    return jordan[0].mul(jordan[1]).mul(jordan[2]);
   }
   
   final static MatFunc sqrt = new MatFunc() { public Complex func(int n, Complex inp) {
@@ -1138,6 +1442,7 @@ public static class CMatrix { //Complex Matrix
     if(h==0) { return new CMatrix(0,0); }
     if(h==1) { return new CMatrix(1,1, elements[0][0].sqrt()); }
     if(h==2) {
+      if(elements[0][0].equals(0) && elements[0][1].equals(0) && elements[1][0].equals(0) && elements[1][1].equals(0)) { return CMatrix.zero(2,2); }
       Complex[] vals = eigenvalues2x2(elements);
       Complex l1 = vals[0].sqrt(), l2 = vals[1].sqrt();
       return add(l1.mul(l2)).diveq(l1.add(l2));
